@@ -1,11 +1,11 @@
 # ─── Stage 1: Install dependencies ────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # ─── Stage 2: Build backend + frontend ────────────────────────────────────
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -15,7 +15,7 @@ RUN npx nx build backend
 RUN NX_IGNORE_UNSUPPORTED_TS_SETUP=true npx nx build frontend --configuration=production
 
 # ─── Stage 3: Runtime ─────────────────────────────────────────────────────
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 

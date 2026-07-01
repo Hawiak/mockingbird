@@ -4,6 +4,9 @@
   "license": "MIT",
   "scripts": {},
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "devDependencies": {
     "@angular-devkit/core": "~21.2.0",
     "@angular-devkit/schematics": "~21.2.0",
@@ -90,5 +93,9 @@
     "socket.io-client": "^4.8.3",
     "xpath": "^0.0.34",
     "zone.js": "^0.15.1"
+  },
+  "overrides": {
+    "multer": "2.2.0",
+    "dompurify": "3.4.11"
   }
 }
