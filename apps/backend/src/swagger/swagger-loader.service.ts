@@ -52,6 +52,11 @@ export class SwaggerLoaderService implements OnModuleDestroy {
     return this.specHashes.has(serviceId);
   }
 
+  /** Persists raw spec text (from an upload) so load() can read it from cache. */
+  saveSpecContent(serviceId: string, content: string): void {
+    writeFileSync(this.cachePath(serviceId), content, 'utf8');
+  }
+
   async load(service: Service): Promise<ParsedSpec> {
     const cachePath = this.cachePath(service.id);
 

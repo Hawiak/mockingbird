@@ -6,13 +6,15 @@ import {
   Delete,
   Param,
   Body,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import type { Config, Service, ServiceDto, OrphanedEndpointDto } from '@mockingbird/shared-types';
+import type { Config, Service, ServiceDto, OrphanedEndpointDto, ParsedSpec } from '@mockingbird/shared-types';
 import { ConfigService } from '../config/config.service';
 import { SwaggerLoaderService } from '../swagger/swagger-loader.service';
 import { SpecDriftService } from '../swagger/spec-drift.service';
+import { MockServerService } from '../mock/mock-server.service';
 import {
   CreateServiceBodyDto,
   UpdateServiceBodyDto,
@@ -21,10 +23,13 @@ import {
 
 @Controller('services')
 export class ServicesController {
+  private readonly logger = new Logger(ServicesController.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly swaggerLoader: SwaggerLoaderService,
     private readonly specDrift: SpecDriftService,
+    private readonly mockServer: MockServerService,
   ) {}
 
   @Get()
@@ -34,8 +39,6 @@ export class ServicesController {
 
   @Post()
   async create(@Body() dto: CreateServiceBodyDto): Promise<ServiceDto> {
-    const config = this.configService.getCurrent()!;
-    const updated: Config = JSON.parse(JSON.stringify(config));
     const service: Service = {
       id: randomUUID(),
       name: dto.name,
@@ -45,8 +48,41 @@ export class ServicesController {
       proxy: dto.proxy,
       endpoints: [],
     };
+
+    if ((service.spec.type === 'upload' || service.spec.type === 'hosted') && dto.specContent) {
+      this.swaggerLoader.saveSpecContent(service.id, dto.specContent);
+    }
+
+    // Resolve the spec and populate endpoints *before* writing, so the
+    // persisted config already reflects them — mergeSpecEndpoints() only
+    // updates in-memory state, and the config file watcher would otherwise
+    // reload from disk shortly after write() and wipe an in-memory-only merge.
+    let spec: ParsedSpec | null = null;
+    try {
+      spec = await this.swaggerLoader.load(service);
+      service.endpoints = spec.endpoints.map(ep => ({
+        id: randomUUID(),
+        method: ep.method,
+        path: ep.path,
+        statements: [],
+      }));
+    } catch (e: unknown) {
+      this.logger.warn(`Failed to load spec for new service "${service.name}": ${(e as Error).message}`);
+    }
+
+    const config = this.configService.getCurrent()!;
+    const updated: Config = JSON.parse(JSON.stringify(config));
     updated.services.push(service);
     await this.configService.write(updated);
+
+    if (spec) {
+      try {
+        await this.mockServer.start(service, spec);
+      } catch (e: unknown) {
+        this.logger.warn(`Failed to start mock server for new service "${service.name}": ${(e as Error).message}`);
+      }
+    }
+
     return service;
   }
 

@@ -22,6 +22,8 @@ export interface CreateServiceDto {
   name: string;
   port: number;
   spec: SpecSource;
+  /** Raw spec file contents, required when spec.type is 'upload' or 'hosted' */
+  specContent?: string;
   cors?: CorsConfig;
   proxy?: ProxyConfig;
 }

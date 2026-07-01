@@ -1,8 +1,9 @@
 # ─── Stage 1: Install dependencies ────────────────────────────────────────
 FROM node:24-alpine AS deps
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build backend + frontend ────────────────────────────────────
 FROM node:24-alpine AS build

@@ -32,6 +32,10 @@ export class CreateServiceBodyDto {
   spec!: SpecSource;
 
   @IsOptional()
+  @IsString()
+  specContent?: string;
+
+  @IsOptional()
   @IsObject()
   cors?: CorsConfig;
 

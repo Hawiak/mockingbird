@@ -111,7 +111,7 @@ import type { ServiceDto, CreateServiceDto } from '@mockingbird/shared-types';
           }
           <div class="step-actions">
             <button mat-button matStepperPrevious>Back</button>
-            <button mat-raised-button color="primary" (click)="create()" [disabled]="creating">
+            <button mat-raised-button color="primary" (click)="create()" [disabled]="creating || !canCreate()">
               @if (creating) { <mat-spinner diameter="16"></mat-spinner> }
               Create Service
             </button>
@@ -150,36 +150,60 @@ export class AddServiceDialogComponent {
   });
 
   uploadedFileName = '';
+  selectedFile: File | null = null;
   creating = false;
   createError = '';
 
   onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.files?.[0]) {
-      this.uploadedFileName = input.files[0].name;
+      this.selectedFile = input.files[0];
+      this.uploadedFileName = this.selectedFile.name;
     }
   }
 
   onDrop(event: DragEvent): void {
     event.preventDefault();
     const file = event.dataTransfer?.files[0];
-    if (file) this.uploadedFileName = file.name;
+    if (file) {
+      this.selectedFile = file;
+      this.uploadedFileName = file.name;
+    }
   }
 
-  create(): void {
+  canCreate(): boolean {
+    const sourceType = this.step2Form.get('sourceType')?.value;
+    if (sourceType === 'upload' || sourceType === 'hosted') return !!this.selectedFile;
+    return true;
+  }
+
+  async create(): Promise<void> {
     const name = this.step1Form.get('name')?.value ?? '';
     const port = Number(this.step1Form.get('port')?.value ?? 8081);
     const sourceType = (this.step2Form.get('sourceType')?.value ?? 'url') as 'url' | 'upload' | 'hosted';
     const url = this.step2Form.get('url')?.value ?? '';
 
+    this.creating = true;
+    this.createError = '';
+
+    let specContent: string | undefined;
+    if ((sourceType === 'upload' || sourceType === 'hosted') && this.selectedFile) {
+      try {
+        specContent = await this.selectedFile.text();
+      } catch {
+        this.creating = false;
+        this.createError = 'Failed to read the selected file';
+        return;
+      }
+    }
+
     const dto: CreateServiceDto = {
       name,
       port,
       spec: { type: sourceType, url: sourceType === 'url' ? url : undefined },
+      specContent,
     };
 
-    this.creating = true;
-    this.createError = '';
     this.api.createService(dto).subscribe({
       next: (svc) => { this.creating = false; this.dialogRef.close(svc); },
       error: (e) => { this.creating = false; this.createError = e.message ?? 'Failed to create service'; },

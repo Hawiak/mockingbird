@@ -4,6 +4,7 @@
   "license": "MIT",
   "scripts": {},
   "private": true,
+  "packageManager": "pnpm@11.9.0+sha512.bd682d5d03fe525ef7c9fd6780c6884d1e756ac4c9c9fe00c538782824310dcf90e3ddc4f53835f06dfaebd5085e41855e0bcbb3b60de2ac5bbab89e5036f03b",
   "engines": {
     "node": ">=24"
   },
@@ -52,10 +53,6 @@
     "webpack-cli": "^7.0.0",
     "webpack-dev-server": "^5.2.1"
   },
-  "workspaces": [
-    "apps/*",
-    "libs/*"
-  ],
   "dependencies": {
     "@angular/animations": "~21.2.0",
     "@angular/cdk": "~21.2.0",
@@ -91,11 +88,8 @@
     "rxjs": "^7.8.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
+    "uuid": "^11.1.1",
     "xpath": "^0.0.34",
     "zone.js": "^0.15.1"
-  },
-  "overrides": {
-    "multer": "2.2.0",
-    "dompurify": "3.4.11"
   }
 }
