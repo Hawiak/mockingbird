@@ -1,0 +1,19 @@
+test-output
+node_modules/
+dist/
+.mockingbird-cache/
+*.tmp
+.env
+.env.*
+!.env.example
+
+# Local dev config — commit mockingbird.example.yaml instead
+mockingbird.yaml
+
+# Build caches
+.nx/cache/
+.nx/workspace-data/
+.angular/cache/
+
+# Docker volumes / local data
+data/

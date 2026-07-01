@@ -1,0 +1,29 @@
+services:
+  mockingbird:
+    build: .
+    image: mockingbird:latest
+    ports:
+      - "9000:9000"
+      # Mock service ports — add more as needed in mockingbird.yaml
+      - "8081:8081"
+      - "8082:8082"
+      - "8083:8083"
+      - "8084:8084"
+    volumes:
+      - ./mockingbird.yaml:/config/mockingbird.yaml
+      - mockingbird-cache:/config/.mockingbird-cache
+    environment:
+      CONFIG_PATH: /config/mockingbird.yaml
+      CACHE_DIR: /config/.mockingbird-cache
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  mockingbird-cache:
+    driver: local

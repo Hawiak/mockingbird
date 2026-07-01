@@ -1,0 +1,51 @@
+version: '1'
+settings:
+  uiPort: 9000
+  logLevel: info
+  logRetention: 1000
+
+responseBlocks:
+  - id: ok
+    name: 200 OK
+    statusCode: 200
+    headers:
+      Content-Type: application/json
+    body: '{"status": "ok"}'
+
+  - id: not_found
+    name: 404 Not Found
+    statusCode: 404
+    headers:
+      Content-Type: application/json
+    body: '{"error": "Not Found"}'
+
+  - id: server_error
+    name: 500 Server Error
+    statusCode: 500
+    headers:
+      Content-Type: application/json
+    body: '{"error": "Internal Server Error"}'
+
+services:
+  - id: petstore
+    name: Petstore
+    port: 8081
+    spec:
+      type: url
+      url: https://petstore3.swagger.io/api/v3/openapi.json
+      refreshIntervalSeconds: 300
+    cors:
+      enabled: true
+      allowOrigins:
+        - '*'
+
+  # Example: private API spec loaded from an env variable
+  # - id: payments
+  #   name: Payments API
+  #   port: 8082
+  #   spec:
+  #     type: url
+  #     url: ${PAYMENTS_SPEC_URL}
+
+modules: []
+parameterSets: []

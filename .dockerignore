@@ -1,0 +1,25 @@
+# Dependencies (reinstalled in deps stage)
+node_modules/
+
+# Build outputs (produced inside Docker)
+dist/
+apps/backend/dist/
+
+# Git history
+.git/
+.gitignore
+
+# Local dev config — users mount their own via -v / docker-compose volumes
+mockingbird.yaml
+
+# Secrets and local env
+.env
+.env.*
+
+# IDE / OS noise
+.DS_Store
+.vscode/
+.idea/
+
+# Test output
+coverage/
