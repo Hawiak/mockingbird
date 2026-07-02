@@ -138,6 +138,8 @@ export interface WorkflowAction {
   topic?: string;
   key?: string;
   payload?: string;
+  /** If set, payload (and key, if the block has one) come from the module's message block instead of the inline fields above */
+  messageBlockId?: string;
   // http_request
   method?: string;
   url?: string;
@@ -175,12 +177,16 @@ export interface KafkaModuleConfig {
   listeners?: KafkaListener[];
   /** Manually-fired "send buttons" for mocking the start of a process */
   triggers?: KafkaSendTrigger[];
+  /** Reusable named payloads, referenced from a kafka_publish action's messageBlockId */
+  messageBlocks?: KafkaMessageBlock[];
 }
 
 export interface KafkaListener {
   id: string;
   topic: string;
   statements: Statement[];
+  /** If set, matching messages run this shared Response Workflow instead of the inline statements above */
+  workflowId?: string;
 }
 
 export interface KafkaSendTrigger {
@@ -189,6 +195,14 @@ export interface KafkaSendTrigger {
   topic: string;
   key?: string;
   /** Rendered through the template engine on fire; {{uuid}}/{{now}} work, {{request.*}} does not (no request context) */
+  payload: string;
+}
+
+export interface KafkaMessageBlock {
+  id: string;
+  name: string;
+  /** Overrides the action's inline key when this block is selected, if set */
+  key?: string;
   payload: string;
 }
 

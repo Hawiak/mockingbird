@@ -121,14 +121,32 @@ const ACTION_COLORS: Record<ActionType, string> = {
                         <mat-label>Topic</mat-label>
                         <input matInput [(ngModel)]="action.topic" (ngModelChange)="emit()" />
                       </mat-form-field>
-                      <mat-form-field appearance="outline" class="full-width">
-                        <mat-label>Key</mat-label>
-                        <input matInput [(ngModel)]="action.key" (ngModelChange)="emit()" />
-                      </mat-form-field>
-                      <mat-form-field appearance="outline" class="full-width">
-                        <mat-label>Payload</mat-label>
-                        <textarea matInput rows="4" [(ngModel)]="action.payload" (ngModelChange)="emit()"></textarea>
-                      </mat-form-field>
+                      <mat-button-toggle-group [(ngModel)]="action.mode" (ngModelChange)="emit()">
+                        <mat-button-toggle value="inline">Inline</mat-button-toggle>
+                        <mat-button-toggle value="block">Message Block</mat-button-toggle>
+                      </mat-button-toggle-group>
+                      @if (action.mode === 'block') {
+                        <mat-form-field appearance="outline" class="full-width">
+                          <mat-label>Message Block</mat-label>
+                          <mat-select [(ngModel)]="action.messageBlockId" (ngModelChange)="emit()">
+                            @for (b of getMessageBlocks(action); track b.id) {
+                              <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                        @if (getMessageBlocks(action).length === 0) {
+                          <p class="no-blocks-hint">No message blocks on this module yet — add one from the module's page.</p>
+                        }
+                      } @else {
+                        <mat-form-field appearance="outline" class="full-width">
+                          <mat-label>Key</mat-label>
+                          <input matInput [(ngModel)]="action.key" (ngModelChange)="emit()" />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="full-width">
+                          <mat-label>Payload</mat-label>
+                          <textarea matInput rows="4" [(ngModel)]="action.payload" (ngModelChange)="emit()"></textarea>
+                        </mat-form-field>
+                      }
                     </div>
                   }
                   @case ('http_request') {
@@ -206,6 +224,7 @@ const ACTION_COLORS: Record<ActionType, string> = {
     .drag-handle { cursor: grab; margin-left: auto; color: #94a3b8; }
     .remove-btn { margin-left: 4px; }
     .action-form { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+    .no-blocks-hint { font-size: 12px; color: #64748b; margin: -4px 0 0; }
     .full-width { width: 100%; }
     .sync-divider { text-align: center; font-size: 12px; color: #64748b; padding: 4px; border-top: 1px dashed #cbd5e1; border-bottom: 1px dashed #cbd5e1; margin: 4px 0; }
     .cdk-drag-placeholder { opacity: 0.4; }
@@ -221,6 +240,12 @@ export class WorkflowEditorComponent implements OnChanges {
 
   get kafkaModules(): ModuleDto[] { return this.modules.filter(m => m.type === 'kafka'); }
   get httpModules(): ModuleDto[] { return this.modules.filter(m => m.type === 'http'); }
+
+  getMessageBlocks(action: WorkflowAction): { id: string; name: string }[] {
+    const mod = this.modules.find(m => m.id === action.module);
+    if (!mod || mod.type !== 'kafka') return [];
+    return ((mod.config as unknown as Record<string, unknown>)['messageBlocks'] as { id: string; name: string }[] | undefined) ?? [];
+  }
 
   ngOnChanges(): void {
     this.localWorkflow = [...this.workflow];

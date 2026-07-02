@@ -19,6 +19,7 @@ export const appRoutes: Routes = [
     ],
   },
   { path: 'modules', loadComponent: () => import('./pages/modules/modules.component').then(m => m.ModulesComponent) },
+  { path: 'modules/:id', loadComponent: () => import('./pages/modules/module-detail.component').then(m => m.ModuleDetailComponent) },
   { path: 'workflows', loadComponent: () => import('./pages/workflows/workflows.component').then(m => m.WorkflowsComponent) },
   { path: 'workflows/:id', loadComponent: () => import('./pages/workflows/workflow-builder.component').then(m => m.WorkflowBuilderComponent) },
   { path: 'response-blocks', loadComponent: () => import('./pages/response-blocks/response-blocks.component').then(m => m.ResponseBlocksComponent) },

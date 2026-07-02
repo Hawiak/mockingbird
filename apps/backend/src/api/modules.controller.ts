@@ -124,7 +124,7 @@ export class ModulesController {
     if (idx === -1) throw new NotFoundException(`Module ${id} not found`);
     updated.modules.splice(idx, 1);
     await this.configService.write(updated);
-    await this.kafkaListener.stop(id);
+    await this.kafkaListener.stopSerialized(id);
   }
 
   @Get(':id/health')

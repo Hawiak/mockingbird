@@ -49,7 +49,7 @@ export class KafkaModuleImpl implements MockingbirdModule {
   }
 
   async subscribe(
-    topics: string[],
+    topics: (string | RegExp)[],
     groupId: string,
     onMessage: (msg: {
       topic: string;

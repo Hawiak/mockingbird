@@ -6,7 +6,9 @@ import { executeRespond } from './actions/respond.action';
 import { executeDelay } from './actions/delay.action';
 import { executeLog } from './actions/log.action';
 import { executeProxy } from './actions/proxy.action';
+import { resolveKafkaPublish } from './actions/kafka-publish.action';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
+import { ConfigService } from '../config/config.service';
 
 @Injectable()
 export class WorkflowExecutorService {
@@ -14,6 +16,7 @@ export class WorkflowExecutorService {
 
   constructor(
     private readonly templateService: TemplateService,
+    private readonly configService: ConfigService,
     @Optional() private readonly moduleRegistry?: ModuleRegistryService,
   ) {}
 
@@ -133,11 +136,8 @@ export class WorkflowExecutorService {
           if (!this.moduleRegistry) throw new Error('ModuleRegistry not available');
           const kafkaMod = this.moduleRegistry.get(action.module!);
           if (!kafkaMod) throw new Error(`Module "${action.module}" not found`);
-          const kafkaParams = {
-            topic: action.topic ?? '',
-            key: action.key ?? '',
-            payload: this.templateService.render(action.payload ?? '', ctx).output,
-          };
+          const modules = this.configService.getCurrent()?.modules ?? [];
+          const kafkaParams = resolveKafkaPublish(action, ctx, modules, this.templateService);
           await kafkaMod.execute(kafkaParams, ctx);
           return { action: 'kafka_publish', status: 'ok', durationMs: Date.now() - start };
         }
@@ -147,7 +147,7 @@ export class WorkflowExecutorService {
           if (!httpMod) throw new Error(`Module "${action.module}" not found`);
           const httpParams = {
             method: action.method ?? 'POST',
-            url: action.url ?? '/',
+            url: this.templateService.render(action.url ?? '/', ctx).output,
             headers: JSON.stringify(action.requestHeaders ?? {}),
             body: this.templateService.render(action.requestBody ?? '', ctx).output,
           };

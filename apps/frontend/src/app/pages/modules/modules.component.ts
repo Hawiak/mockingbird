@@ -1,5 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -12,16 +13,15 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDividerModule } from '@angular/material/divider';
 import { ApiService } from '../../core/api.service';
-import type { ModuleDto, CreateModuleDto, KafkaListener, KafkaSendTrigger } from '@mockingbird/shared-types';
-import { KafkaTopicStatementsComponent } from './kafka-topic-statements.component';
+import type { ModuleDto, CreateModuleDto } from '@mockingbird/shared-types';
 
 @Component({
   standalone: true,
   selector: 'app-modules',
   imports: [
     CommonModule,
+    RouterModule,
     FormsModule,
     ReactiveFormsModule,
     MatCardModule,
@@ -35,8 +35,6 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
     MatSelectModule,
     MatTooltipModule,
     MatSnackBarModule,
-    MatDividerModule,
-    KafkaTopicStatementsComponent,
   ],
   template: `
     <mat-sidenav-container class="page-container">
@@ -90,68 +88,7 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
                   <mat-option value="SCRAM-SHA-512">SCRAM-SHA-512</mat-option>
                 </mat-select>
               </mat-form-field>
-
-              <mat-divider></mat-divider>
-              <div class="listeners-header">
-                <h4>Listen to topics</h4>
-                <button mat-stroked-button type="button" (click)="addListener()">
-                  <mat-icon>add</mat-icon> Add Topic
-                </button>
-              </div>
-              @if (kafkaListeners.length === 0) {
-                <p class="listeners-hint">Not listening on any topics — this module will only send messages.</p>
-              }
-              @for (listener of kafkaListeners; track listener.id) {
-                <div class="listener-row">
-                  <mat-form-field appearance="outline" class="listener-topic">
-                    <mat-label>Topic</mat-label>
-                    <input matInput [(ngModel)]="listener.topic" [ngModelOptions]="{standalone: true}" />
-                  </mat-form-field>
-                  <span class="listener-stmt-count">{{ listener.statements.length }} statement(s)</span>
-                  <button mat-icon-button type="button" (click)="editListenerStatements(listener)" matTooltip="Edit statements">
-                    <mat-icon>rule</mat-icon>
-                  </button>
-                  <button mat-icon-button type="button" color="warn" (click)="removeListener(listener)" matTooltip="Delete topic">
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </div>
-              }
-
-              <mat-divider></mat-divider>
-              <div class="listeners-header">
-                <h4>Send buttons</h4>
-                <button mat-stroked-button type="button" (click)="addTrigger()">
-                  <mat-icon>add</mat-icon> Add Button
-                </button>
-              </div>
-              @if (kafkaTriggers.length === 0) {
-                <p class="listeners-hint">No send buttons yet — add one to manually publish a message, e.g. to mock the start of a process.</p>
-              }
-              @for (trigger of kafkaTriggers; track trigger.id) {
-                <div class="trigger-card">
-                  <div class="trigger-row">
-                    <mat-form-field appearance="outline" class="listener-topic">
-                      <mat-label>Button label</mat-label>
-                      <input matInput [(ngModel)]="trigger.name" [ngModelOptions]="{standalone: true}" />
-                    </mat-form-field>
-                    <button mat-icon-button type="button" color="warn" (click)="removeTrigger(trigger)" matTooltip="Delete">
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </div>
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Topic</mat-label>
-                    <input matInput [(ngModel)]="trigger.topic" [ngModelOptions]="{standalone: true}" />
-                  </mat-form-field>
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Key (optional)</mat-label>
-                    <input matInput [(ngModel)]="trigger.key" [ngModelOptions]="{standalone: true}" />
-                  </mat-form-field>
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Payload</mat-label>
-                    <textarea matInput rows="3" [(ngModel)]="trigger.payload" [ngModelOptions]="{standalone: true}"></textarea>
-                  </mat-form-field>
-                </div>
-              }
+              <p class="drawer-hint">Listeners, send buttons and message blocks are configured on the module's own page after it's created.</p>
             }
 
             @if (form.get('type')?.value === 'http') {
@@ -223,7 +160,9 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
           @for (mod of modules; track mod.id) {
             <mat-card class="module-card">
               <mat-card-header>
-                <mat-card-title>{{ mod.name }}</mat-card-title>
+                <mat-card-title>
+                  <a [routerLink]="['/modules', mod.id]" class="card-title-link">{{ mod.name }}</a>
+                </mat-card-title>
                 <mat-card-subtitle>
                   <mat-chip [class]="'type-chip type-' + mod.type">{{ mod.type }}</mat-chip>
                 </mat-card-subtitle>
@@ -253,23 +192,17 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
                   <p class="scope-label">Scope: {{ mod.scope }}</p>
                 }
                 <p class="used-by">Used by {{ mod.usedByCount }} endpoint(s)</p>
-                @if (getTriggers(mod).length) {
-                  <div class="trigger-buttons">
-                    @for (trigger of getTriggers(mod); track trigger.id) {
-                      <button mat-stroked-button color="accent" (click)="fireTrigger(mod, trigger)" [disabled]="firing[trigger.id]">
-                        @if (firing[trigger.id]) { <mat-spinner diameter="14"></mat-spinner> } @else { <mat-icon>send</mat-icon> }
-                        {{ trigger.name || trigger.topic }}
-                      </button>
-                    }
-                  </div>
-                }
               </mat-card-content>
               <mat-card-actions>
                 <button mat-stroked-button (click)="testConnection(mod)" [disabled]="testing[mod.id]">
                   @if (testing[mod.id]) { <mat-spinner diameter="16"></mat-spinner> }
                   Test Connection
                 </button>
-                <button mat-icon-button (click)="openEdit(mod, drawer)" matTooltip="Edit">
+                <span class="actions-spacer"></span>
+                <a mat-icon-button [routerLink]="['/modules', mod.id]" matTooltip="Open">
+                  <mat-icon>open_in_new</mat-icon>
+                </a>
+                <button mat-icon-button (click)="openEdit(mod, drawer)" matTooltip="Edit connection">
                   <mat-icon>edit</mat-icon>
                 </button>
                 <button mat-icon-button color="warn" (click)="deleteModule(mod.id)" matTooltip="Delete">
@@ -281,23 +214,6 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
         </div>
       </mat-sidenav-content>
     </mat-sidenav-container>
-
-    @if (editingListener) {
-      <div class="listener-drawer-backdrop" (click)="closeListenerEditor()"></div>
-      <div class="listener-drawer-panel">
-        <div class="listener-drawer-head">
-          <span>Statements for topic "{{ editingListener.topic || '(unnamed)' }}"</span>
-          <button mat-icon-button (click)="closeListenerEditor()"><mat-icon>close</mat-icon></button>
-        </div>
-        <div class="listener-drawer-body">
-          <app-kafka-topic-statements
-            [statements]="editingListener.statements"
-            [modules]="modules"
-            (statementsChange)="editingListener!.statements = $event">
-          </app-kafka-topic-statements>
-        </div>
-      </div>
-    }
   `,
   styles: [`
     .page-container { height: calc(100vh - 64px); }
@@ -305,12 +221,15 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
     .drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid #e2e8f0; }
     .drawer-header h3 { margin: 0; }
     .drawer-body { padding: 16px; overflow-y: auto; height: calc(100% - 64px); }
+    .drawer-hint { font-size: 12px; color: #64748b; margin: 8px 0 0; }
     .content-area { padding: 24px; }
     .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
     .page-header h1 { margin: 0; }
     .loading-center { display: flex; justify-content: center; padding: 40px; }
     .modules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
     .module-card mat-card-content { padding: 0 16px 8px; }
+    .card-title-link { color: inherit; text-decoration: none; }
+    .card-title-link:hover { text-decoration: underline; }
     .health-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
     .health-icon { font-size: 20px; width: 20px; height: 20px; }
     .health-icon.healthy { color: #22c55e; }
@@ -326,19 +245,7 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
     .type-http { background: #3b82f6; }
     .full-width { width: 100%; }
     .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
-    .listeners-header { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
-    .listeners-header h4 { margin: 0; font-size: 13px; }
-    .listeners-hint { font-size: 12px; color: #64748b; margin: 0 0 8px; }
-    .listener-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .listener-topic { flex: 1; }
-    .listener-stmt-count { font-size: 11px; color: #64748b; white-space: nowrap; }
-    .trigger-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px 0; margin-bottom: 12px; }
-    .trigger-row { display: flex; align-items: center; gap: 8px; }
-    .trigger-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .listener-drawer-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 1000; }
-    .listener-drawer-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100vw; background: white; z-index: 1001; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,0.15); }
-    .listener-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; }
-    .listener-drawer-body { flex: 1; overflow-y: auto; padding: 16px; }
+    .actions-spacer { flex: 1; }
   `]
 })
 export class ModulesComponent implements OnInit {
@@ -346,11 +253,13 @@ export class ModulesComponent implements OnInit {
   loading = false;
   saving = false;
   testing: Record<string, boolean> = {};
-  firing: Record<string, boolean> = {};
   editingId: string | null = null;
-  kafkaListeners: KafkaListener[] = [];
-  editingListener: KafkaListener | null = null;
-  kafkaTriggers: KafkaSendTrigger[] = [];
+
+  /** Preserved untouched from the module being edited — this drawer never edits them,
+   *  but must not wipe them out when it saves the rest of the config. */
+  private existingListeners: unknown[] = [];
+  private existingTriggers: unknown[] = [];
+  private existingMessageBlocks: unknown[] = [];
 
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
@@ -390,8 +299,9 @@ export class ModulesComponent implements OnInit {
 
   openNew(drawer: any): void {
     this.editingId = null;
-    this.kafkaListeners = [];
-    this.kafkaTriggers = [];
+    this.existingListeners = [];
+    this.existingTriggers = [];
+    this.existingMessageBlocks = [];
     this.form.reset({ type: 'kafka', authType: 'none', saslMechanism: 'PLAIN' });
     drawer.open();
   }
@@ -402,8 +312,9 @@ export class ModulesComponent implements OnInit {
     if (mod.type === 'kafka') {
       const brokers = Array.isArray(cfg['brokers']) ? (cfg['brokers'] as string[]).join('\n') : '';
       const sasl = cfg['sasl'] as Record<string, string> | undefined;
-      this.kafkaListeners = JSON.parse(JSON.stringify(cfg['listeners'] ?? []));
-      this.kafkaTriggers = JSON.parse(JSON.stringify(cfg['triggers'] ?? []));
+      this.existingListeners = cfg['listeners'] ?? [];
+      this.existingTriggers = cfg['triggers'] ?? [];
+      this.existingMessageBlocks = cfg['messageBlocks'] ?? [];
       this.form.patchValue({
         name: mod.name,
         type: 'kafka',
@@ -415,8 +326,9 @@ export class ModulesComponent implements OnInit {
         saslMechanism: sasl?.['mechanism'] ?? 'PLAIN',
       });
     } else {
-      this.kafkaListeners = [];
-      this.kafkaTriggers = [];
+      this.existingListeners = [];
+      this.existingTriggers = [];
+      this.existingMessageBlocks = [];
       const auth = cfg['auth'] as Record<string, string> | undefined;
       this.form.patchValue({
         name: mod.name,
@@ -439,7 +351,8 @@ export class ModulesComponent implements OnInit {
     if (v.type === 'kafka') {
       const brokers = (v.brokers ?? '').split('\n').map((b: string) => b.trim()).filter((b: string) => b);
       const config: Record<string, unknown> = {
-        brokers, groupId: v.groupId, listeners: this.kafkaListeners, triggers: this.kafkaTriggers,
+        brokers, groupId: v.groupId,
+        listeners: this.existingListeners, triggers: this.existingTriggers, messageBlocks: this.existingMessageBlocks,
       };
       if (v.saslUsername) {
         config['sasl'] = { mechanism: v.saslMechanism, username: v.saslUsername, password: v.saslPassword };
@@ -510,55 +423,6 @@ export class ModulesComponent implements OnInit {
     this.api.deleteModule(id).subscribe({
       next: () => { this.modules = this.modules.filter(m => m.id !== id); },
       error: () => this.snack.open('Failed to delete module', 'OK', { duration: 3000 }),
-    });
-  }
-
-  addListener(): void {
-    this.kafkaListeners = [...this.kafkaListeners, { id: crypto.randomUUID(), topic: '', statements: [] }];
-  }
-
-  editListenerStatements(listener: KafkaListener): void {
-    this.editingListener = listener;
-  }
-
-  closeListenerEditor(): void {
-    this.editingListener = null;
-  }
-
-  removeListener(listener: KafkaListener): void {
-    this.kafkaListeners = this.kafkaListeners.filter(l => l.id !== listener.id);
-  }
-
-  addTrigger(): void {
-    this.kafkaTriggers = [
-      ...this.kafkaTriggers,
-      { id: crypto.randomUUID(), name: '', topic: '', key: '', payload: '' },
-    ];
-  }
-
-  removeTrigger(trigger: KafkaSendTrigger): void {
-    this.kafkaTriggers = this.kafkaTriggers.filter(t => t.id !== trigger.id);
-  }
-
-  getTriggers(mod: ModuleDto): KafkaSendTrigger[] {
-    if (mod.type !== 'kafka') return [];
-    return ((mod.config as unknown as Record<string, unknown>)['triggers'] as KafkaSendTrigger[] | undefined) ?? [];
-  }
-
-  fireTrigger(mod: ModuleDto, trigger: KafkaSendTrigger): void {
-    this.firing[trigger.id] = true;
-    this.api.fireModuleTrigger(mod.id, trigger.id).subscribe({
-      next: (result) => {
-        this.firing[trigger.id] = false;
-        const msg = result.success
-          ? `Sent to "${trigger.topic}"${result.latencyMs != null ? ' (' + result.latencyMs + 'ms)' : ''}`
-          : `Failed: ${result.message ?? 'unknown error'}`;
-        this.snack.open(msg, 'OK', { duration: 3000 });
-      },
-      error: () => {
-        this.firing[trigger.id] = false;
-        this.snack.open('Failed to send message', 'OK', { duration: 3000 });
-      },
     });
   }
 }

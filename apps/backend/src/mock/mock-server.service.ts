@@ -18,6 +18,7 @@ import { ConditionService } from '../statement/condition.service';
 import { StatementMatcherService } from '../statement/statement-matcher.service';
 import { WorkflowExecutorService } from '../workflow/workflow-executor.service';
 import { TemplateService } from '../workflow/template.service';
+import { resolveWorkflowActions } from '../workflow/response-workflow-resolver';
 import { LogService } from '../log/log.service';
 import { LogGateway } from '../log/log.gateway';
 import { createCorsMiddleware } from './cors.middleware';
@@ -114,43 +115,7 @@ export class MockServerService implements OnModuleInit {
           } else if (liveEndpoint?.workflowId) {
             const wf = liveConfig.responseWorkflows?.find(w => w.id === liveEndpoint!.workflowId);
             if (wf) {
-              const orderedSteps = [...wf.steps].sort((a, b) => a.order - b.order);
-              const activeSteps = orderedSteps.filter(step => {
-                if (step.conditionId) {
-                  const saved = liveConfig.savedConditions?.find(c => c.id === step.conditionId);
-                  return saved ? this.conditionService.evaluate(saved.condition, ctx) : true;
-                }
-                if (step.condition) {
-                  return this.conditionService.evaluate(step.condition, ctx);
-                }
-                return true;
-              });
-
-              // Translate steps to WorkflowAction[]
-              const actions: import('@mockingbird/shared-types').WorkflowAction[] = activeSteps.map(step => {
-                if (step.type === 'return_response') {
-                  return { action: 'respond' as const, mode: 'block' as const, responseBlockId: step.responseBlockId };
-                }
-                // use_module_action — determine type from module config
-                const mod = liveConfig.modules?.find(m => m.id === step.moduleId);
-                if (mod?.type === 'kafka') {
-                  return {
-                    action: 'kafka_publish' as const,
-                    module: step.moduleId,
-                    topic: step.kafkaTopic ?? '',
-                    key: step.kafkaKey ?? '',
-                    payload: step.kafkaPayload ?? '',
-                  };
-                }
-                return {
-                  action: 'http_request' as const,
-                  module: step.moduleId,
-                  method: step.httpMethod ?? 'POST',
-                  url: step.httpUrl ?? '/',
-                  requestHeaders: step.httpHeaders,
-                  requestBody: step.httpBody ?? '',
-                };
-              });
+              const actions = resolveWorkflowActions(wf, ctx, liveConfig, this.conditionService);
 
               const paramSets: Record<string, Record<string, string>> = {};
               const tplCtx: import('@mockingbird/shared-types').TemplateContext = {
