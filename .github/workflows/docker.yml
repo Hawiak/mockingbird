@@ -31,7 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # arm64 only matters for published images (main/tags) — PRs just need to
+      # verify the build works, so skip the QEMU-emulated arm64 leg (which is
+      # the single biggest chunk of CI time, 10-20 min vs ~1 min native amd64).
       - name: Set up QEMU
+        if: github.event_name != 'pull_request'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Buildx
@@ -60,7 +64,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
