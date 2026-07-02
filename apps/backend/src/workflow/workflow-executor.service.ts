@@ -94,12 +94,32 @@ export class WorkflowExecutorService {
     }
   }
 
+  /**
+   * Runs a workflow's actions with no HTTP request/response boundary — for triggers
+   * that aren't an HTTP request (e.g. a Kafka listener). `respond`/`proxy` are skipped
+   * since there's no response channel to write to.
+   */
+  async executeFireAndForget(
+    workflow: WorkflowAction[],
+    ctx: TemplateContext,
+    workflowLog: WorkflowLogEntry[],
+  ): Promise<void> {
+    for (const action of workflow) {
+      if (action.action === 'respond' || action.action === 'proxy') {
+        this.logger.warn(`Action "${action.action}" is not supported outside an HTTP request — skipped`);
+        continue;
+      }
+      const entry = await this.runAction(action, ctx);
+      if (entry) workflowLog.push(entry);
+    }
+  }
+
   private async runAction(
     action: WorkflowAction,
     ctx: TemplateContext,
-    _req: Request,
-    _res: Response,
-    _responseBlocks: ResponseBlock[],
+    _req?: Request,
+    _res?: Response,
+    _responseBlocks?: ResponseBlock[],
   ): Promise<WorkflowLogEntry | null> {
     const start = Date.now();
     try {

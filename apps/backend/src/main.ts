@@ -6,6 +6,7 @@ import { ConfigService } from './config/config.service';
 import { ConfigWatcherService } from './config/config-watcher.service';
 import { MockServerService } from './mock/mock-server.service';
 import { ModuleRegistryService } from './module-registry/module-registry.service';
+import { KafkaListenerService } from './kafka-listener/kafka-listener.service';
 import { SwaggerLoaderService } from './swagger/swagger-loader.service';
 
 async function bootstrap(): Promise<void> {
@@ -26,9 +27,11 @@ async function bootstrap(): Promise<void> {
 
   // Initialize module registry from config
   const moduleRegistry = app.get(ModuleRegistryService);
+  const kafkaListener = app.get(KafkaListenerService);
   for (const mod of config.modules ?? []) {
     try {
       await moduleRegistry.configure(mod);
+      if (mod.type === 'kafka') await kafkaListener.reload(mod);
     } catch (e: unknown) {
       Logger.warn(
         `Failed to configure module "${mod.name}": ${(e as Error).message}`,
@@ -43,6 +46,7 @@ async function bootstrap(): Promise<void> {
     for (const mod of newConfig.modules ?? []) {
       try {
         await moduleRegistry.configure(mod);
+        if (mod.type === 'kafka') await kafkaListener.reload(mod);
       } catch {
         // silently swallow — config watcher service already logs errors
       }

@@ -103,6 +103,7 @@ export class ApiService {
   updateModule(id: string, dto: UpdateModuleDto): Observable<ModuleDto> { return this.http.put<ModuleDto>(`${BASE}/modules/${id}`, dto); }
   deleteModule(id: string): Observable<void> { return this.http.delete<void>(`${BASE}/modules/${id}`); }
   getModuleHealth(id: string): Observable<TestConnectionResultDto> { return this.http.get<TestConnectionResultDto>(`${BASE}/modules/${id}/health`); }
+  fireModuleTrigger(id: string, triggerId: string): Observable<TestConnectionResultDto> { return this.http.post<TestConnectionResultDto>(`${BASE}/modules/${id}/triggers/${triggerId}/fire`, {}); }
 
   // Parameter sets
   getParameterSets(): Observable<ParameterSetDto[]> { return this.http.get<ParameterSetDto[]>(`${BASE}/parameter-sets`); }

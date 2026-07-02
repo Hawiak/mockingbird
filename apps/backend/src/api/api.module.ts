@@ -3,6 +3,7 @@ import { ConfigModule } from '../config/config.module';
 import { SwaggerModule } from '../swagger/swagger.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
+import { KafkaListenerModule } from '../kafka-listener/kafka-listener.module';
 import { MockModule } from '../mock/mock.module';
 import { LogModule } from '../log/log.module';
 import { SpecDriftService } from '../swagger/spec-drift.service';
@@ -25,6 +26,7 @@ import { SavedConditionsController } from './saved-conditions.controller';
     SwaggerModule,
     WorkflowModule,
     ModuleRegistryModule,
+    KafkaListenerModule,
     MockModule,
     LogModule,
   ],

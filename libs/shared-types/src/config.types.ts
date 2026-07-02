@@ -169,6 +169,27 @@ export interface KafkaModuleConfig {
   clientId?: string;
   ssl?: boolean;
   sasl?: { mechanism: string; username: string; password: string };
+  /** Consumer group id for listeners; defaults to `mockingbird-${moduleId}` when omitted */
+  groupId?: string;
+  /** Topics this module listens on; each has its own statements (condition + workflow) */
+  listeners?: KafkaListener[];
+  /** Manually-fired "send buttons" for mocking the start of a process */
+  triggers?: KafkaSendTrigger[];
+}
+
+export interface KafkaListener {
+  id: string;
+  topic: string;
+  statements: Statement[];
+}
+
+export interface KafkaSendTrigger {
+  id: string;
+  name: string;
+  topic: string;
+  key?: string;
+  /** Rendered through the template engine on fire; {{uuid}}/{{now}} work, {{request.*}} does not (no request context) */
+  payload: string;
 }
 
 export interface HttpModuleConfig {

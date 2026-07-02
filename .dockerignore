@@ -23,3 +23,8 @@ mockingbird.yaml
 
 # Test output
 coverage/
+
+# Build caches — confuse Nx's project graph scan if copied into the build context
+.nx/cache/
+.nx/workspace-data/
+.angular/cache/

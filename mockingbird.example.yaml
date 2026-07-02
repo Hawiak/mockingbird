@@ -47,5 +47,28 @@ services:
   #     type: url
   #     url: ${PAYMENTS_SPEC_URL}
 
+# Example: Kafka module with SASL credentials pulled from the environment
+# (see .env.example — never hardcode secrets here). Listens on a topic and
+# can also publish via the `kafka_publish` workflow action or a manual
+# "send button" trigger.
+# modules:
+#   - id: main-kafka
+#     name: Main Kafka
+#     type: kafka
+#     config:
+#       brokers: [kafka:9092]
+#       sasl:
+#         mechanism: PLAIN
+#         username: ${KAFKA_USERNAME}
+#         password: ${KAFKA_PASSWORD}
+#       listeners:
+#         - id: orders-created
+#           topic: orders.created
+#           statements: []
+#       triggers:
+#         - id: start-order
+#           name: Start Order
+#           topic: orders.created
+#           payload: '{"orderId": "{{uuid}}", "status": "created"}'
 modules: []
 parameterSets: []

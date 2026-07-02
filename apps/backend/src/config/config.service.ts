@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync, writeFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { load, dump } from 'js-yaml';
-import type { Config, ParsedEndpoint } from '@mockingbird/shared-types';
+import type { Config, ParsedEndpoint, KafkaModuleConfig } from '@mockingbird/shared-types';
 
 @Injectable()
 export class ConfigService {
@@ -13,9 +13,14 @@ export class ConfigService {
   async load(path: string): Promise<Config> {
     this.configPath = path;
     const raw = readFileSync(path, 'utf8');
-    const parsed = load(raw) as Config;
+    const parsed = (raw.trim() === '' ? {} : (load(raw) ?? {})) as Config;
     const resolved = this.resolveEnvVars(parsed) as Config;
-    // Ensure every service has an endpoints array even if absent in YAML
+    // Ensure every top-level list/object exists even if absent or the file was empty
+    resolved.version ??= '1';
+    resolved.settings ??= { uiPort: 9000 };
+    resolved.services ??= [];
+    resolved.modules ??= [];
+    resolved.parameterSets ??= [];
     resolved.responseBlocks ??= [];
     resolved.responseWorkflows ??= [];
     resolved.savedConditions ??= [];
@@ -99,6 +104,14 @@ export class ConfigService {
       if (!svc.id) throw new Error(`Service "${svc.name}" is missing an id`);
       if (!svc.port || svc.port < 1 || svc.port > 65535)
         throw new Error(`Service "${svc.name}" has invalid port ${svc.port}`);
+    }
+    for (const mod of config.modules) {
+      if (mod.type !== 'kafka') continue;
+      const listeners = (mod.config as KafkaModuleConfig).listeners ?? [];
+      const topics = listeners.map(l => l.topic);
+      const topicDups = topics.filter((t, i) => topics.indexOf(t) !== i);
+      if (topicDups.length)
+        throw new Error(`Module "${mod.name}" has duplicate Kafka topics: ${topicDups.join(', ')}`);
     }
   }
 

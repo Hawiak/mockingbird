@@ -82,6 +82,7 @@
 /* ── Topbar ── */
 .main-content {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
   height: 100%;

@@ -14,7 +14,7 @@ import { Subscription } from 'rxjs';
 import { LogSocketService } from '../../core/log-socket.service';
 import type { LogEntryDto } from '@mockingbird/shared-types';
 
-const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
+const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'KAFKA'];
 const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
 
 @Component({
@@ -35,7 +35,7 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
   ],
   template: `
     <mat-sidenav-container class="page-container">
-      <mat-sidenav #detailDrawer mode="over" position="end" class="detail-drawer">
+      <mat-sidenav #detailDrawer mode="side" position="end" class="detail-drawer">
         @if (selectedEntry) {
           <div class="drawer-header">
             <h3>Request Detail</h3>
@@ -198,6 +198,7 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
     .method-put { color: #f59e0b; border-color: #f59e0b; }
     .method-delete { color: #ef4444; border-color: #ef4444; }
     .method-patch { color: #a78bfa; border-color: #a78bfa; }
+    .method-kafka { color: #f97316; border-color: #f97316; }
     .status-2xx { color: #22c55e; border-color: #22c55e; }
     .status-3xx { color: #3b82f6; border-color: #3b82f6; }
     .status-4xx { color: #f59e0b; border-color: #f59e0b; }
@@ -216,6 +217,7 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
     .method-put { background: #f59e0b; }
     .method-patch { background: #a78bfa; }
     .method-delete { background: #ef4444; }
+    .method-kafka { background: #f97316; }
     .status-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; color: white; white-space: nowrap; }
     .status-2xx { background: #22c55e; }
     .status-3xx { background: #3b82f6; }

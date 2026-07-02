@@ -1,4 +1,4 @@
-import { Kafka, Producer, Admin } from 'kafkajs';
+import { Kafka, Producer, Admin, Consumer } from 'kafkajs';
 import type { TemplateContext } from '@mockingbird/shared-types';
 import { MockingbirdModule, HealthResult } from '../module-registry.interface';
 
@@ -38,13 +38,51 @@ export class KafkaModuleImpl implements MockingbirdModule {
     // Lazy connect with retry
     if (!this.producer) {
       this.producer = this.kafka.producer();
-      await this.connectWithRetry();
+      const producer = this.producer;
+      await this.withRetry(() => producer.connect());
     }
 
     await this.producer.send({
       topic: params['topic'] ?? '',
       messages: [{ key: params['key'] || null, value: params['payload'] ?? '' }],
     });
+  }
+
+  async subscribe(
+    topics: string[],
+    groupId: string,
+    onMessage: (msg: {
+      topic: string;
+      key: string | null;
+      value: string;
+      headers: Record<string, string>;
+    }) => Promise<void>,
+  ): Promise<Consumer> {
+    if (!this.kafka) throw new Error('Kafka module not configured');
+    const consumer = this.kafka.consumer({ groupId });
+    // Fresh topics (esp. relying on broker auto-create) can transiently fail
+    // subscribe/run with "This server does not host this topic-partition"
+    // while partition leadership is still being elected — retry like the
+    // producer's lazy connect does.
+    await this.withRetry(async () => {
+      await consumer.connect();
+      await consumer.subscribe({ topics, fromBeginning: false });
+      await consumer.run({
+        eachMessage: async ({ topic, message }) => {
+          const headers: Record<string, string> = {};
+          for (const [k, v] of Object.entries(message.headers ?? {})) {
+            headers[k] = v?.toString() ?? '';
+          }
+          await onMessage({
+            topic,
+            key: message.key?.toString() ?? null,
+            value: message.value?.toString() ?? '',
+            headers,
+          });
+        },
+      });
+    });
+    return consumer;
   }
 
   async healthCheck(): Promise<HealthResult> {
@@ -61,14 +99,14 @@ export class KafkaModuleImpl implements MockingbirdModule {
     }
   }
 
-  private async connectWithRetry(attempt = 0): Promise<void> {
+  private async withRetry<T>(fn: () => Promise<T>, attempt = 0): Promise<T> {
     const delays = [1000, 2000, 4000];
     try {
-      await this.producer!.connect();
+      return await fn();
     } catch (e) {
       if (attempt < 3) {
         await new Promise((r) => setTimeout(r, delays[attempt] ?? 4000));
-        return this.connectWithRetry(attempt + 1);
+        return this.withRetry(fn, attempt + 1);
       }
       throw e;
     }

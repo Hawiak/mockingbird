@@ -112,6 +112,32 @@ parameterSets: []
       const config = await service.load(path);
       expect(config.services[0].spec.url).toBe('http:///spec.json');
     });
+
+    it('returns a valid empty config for an empty file (does not throw)', async () => {
+      const path = tmpFile('empty.yaml');
+      writeFileSync(path, '', 'utf8');
+
+      const config = await service.load(path);
+
+      expect(config.services).toEqual([]);
+      expect(config.modules).toEqual([]);
+    });
+
+    it('defaults services to [] when absent from YAML (does not throw)', async () => {
+      const path = tmpFile('no-services.yaml');
+      const raw = `
+version: '1'
+settings:
+  uiPort: 9000
+modules: []
+parameterSets: []
+`;
+      writeFileSync(path, raw, 'utf8');
+
+      const config = await service.load(path);
+
+      expect(config.services).toEqual([]);
+    });
   });
 
   describe('write()', () => {
@@ -180,8 +206,8 @@ parameterSets: []
     afterAll(() => {
       // Clean up tmp files
       const dir = join(tmpdir(), 'mockingbird-test');
-      const files = ['valid.yaml', 'env-vars.yaml', 'missing-env.yaml', 'write-test.yaml',
-        'dup-ports.yaml', 'no-id.yaml', 'bad-port.yaml'];
+      const files = ['valid.yaml', 'env-vars.yaml', 'missing-env.yaml', 'empty.yaml',
+        'no-services.yaml', 'write-test.yaml', 'dup-ports.yaml', 'no-id.yaml', 'bad-port.yaml'];
       for (const f of files) {
         const p = join(dir, f);
         if (existsSync(p)) try { unlinkSync(p); } catch { /* ignore */ }

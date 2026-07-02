@@ -10,6 +10,7 @@ import { LogModule } from '../log/log.module';
 import { StatementModule } from '../statement/statement.module';
 import { WorkflowModule } from '../workflow/workflow.module';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
+import { KafkaListenerModule } from '../kafka-listener/kafka-listener.module';
 import { ApiModule } from '../api/api.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { ApiModule } from '../api/api.module';
     StatementModule,
     WorkflowModule,
     ModuleRegistryModule,
+    KafkaListenerModule,
     ApiModule,
   ],
   controllers: [AppController],

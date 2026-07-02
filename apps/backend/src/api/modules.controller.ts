@@ -14,9 +14,13 @@ import type {
   ModuleConfig,
   ModuleDto,
   TestConnectionResultDto,
+  KafkaModuleConfig,
+  TemplateContext,
 } from '@mockingbird/shared-types';
 import { ConfigService } from '../config/config.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
+import { KafkaListenerService } from '../kafka-listener/kafka-listener.service';
+import { TemplateService } from '../workflow/template.service';
 import { CreateModuleBodyDto, UpdateModuleBodyDto } from './dto';
 
 @Controller('modules')
@@ -24,6 +28,8 @@ export class ModulesController {
   constructor(
     private readonly configService: ConfigService,
     private readonly moduleRegistry: ModuleRegistryService,
+    private readonly kafkaListener: KafkaListenerService,
+    private readonly templateService: TemplateService,
   ) {}
 
   private toDto(mod: ModuleConfig, config: Config): ModuleDto {
@@ -70,6 +76,7 @@ export class ModulesController {
     await this.configService.write(updated);
     try {
       await this.moduleRegistry.configure(mod);
+      if (mod.type === 'kafka') await this.kafkaListener.reload(mod);
     } catch {
       // non-fatal: module is saved, just not yet connected
     }
@@ -102,6 +109,7 @@ export class ModulesController {
     await this.configService.write(updated);
     try {
       await this.moduleRegistry.configure(updated.modules[idx]);
+      if (updated.modules[idx].type === 'kafka') await this.kafkaListener.reload(updated.modules[idx]);
     } catch {
       // non-fatal
     }
@@ -116,6 +124,7 @@ export class ModulesController {
     if (idx === -1) throw new NotFoundException(`Module ${id} not found`);
     updated.modules.splice(idx, 1);
     await this.configService.write(updated);
+    await this.kafkaListener.stop(id);
   }
 
   @Get(':id/health')
@@ -145,5 +154,43 @@ export class ModulesController {
       message: result.message,
       latencyMs: result.latencyMs,
     };
+  }
+
+  @Post(':id/triggers/:triggerId/fire')
+  async fireTrigger(
+    @Param('id') id: string,
+    @Param('triggerId') triggerId: string,
+  ): Promise<TestConnectionResultDto> {
+    const config = this.configService.getCurrent()!;
+    const mod = config.modules?.find(m => m.id === id);
+    if (!mod || mod.type !== 'kafka') throw new NotFoundException(`Kafka module ${id} not found`);
+
+    const trigger = (mod.config as KafkaModuleConfig).triggers?.find(t => t.id === triggerId);
+    if (!trigger) throw new NotFoundException(`Trigger ${triggerId} not found`);
+
+    const kafkaMod = this.moduleRegistry.get(id);
+    if (!kafkaMod) return { success: false, message: 'Module is not connected' };
+
+    const ctx: TemplateContext = {
+      request: {
+        method: 'MANUAL', path: '', pathParams: {}, queryParams: {}, headers: {}, body: '', callCount: 0,
+      },
+      parameterSets: {},
+    };
+
+    const start = Date.now();
+    try {
+      await kafkaMod.execute(
+        {
+          topic: this.templateService.render(trigger.topic, ctx).output,
+          key: this.templateService.render(trigger.key ?? '', ctx).output,
+          payload: this.templateService.render(trigger.payload, ctx).output,
+        },
+        ctx,
+      );
+      return { success: true, latencyMs: Date.now() - start };
+    } catch (e: unknown) {
+      return { success: false, message: (e as Error).message };
+    }
   }
 }
