@@ -20,6 +20,7 @@ import type {
   SavedConditionDto,
 } from '../../core/api.service';
 import type { ResponseBlockDto, ModuleDto } from '@mockingbird/shared-types';
+import { TemplatePreviewComponent } from '../../components/template-preview.component';
 
 interface InlineCondition {
   type: string;
@@ -44,6 +45,7 @@ interface InlineCondition {
     MatSelectModule,
     MatTooltipModule,
     MatSnackBarModule,
+    TemplatePreviewComponent,
   ],
   template: `
     <div class="builder-page">
@@ -152,6 +154,7 @@ interface InlineCondition {
                       <mat-label>Payload</mat-label>
                       <textarea matInput rows="3" [(ngModel)]="step.kafkaPayload" (ngModelChange)="triggerSave()"></textarea>
                     </mat-form-field>
+                    <app-template-preview [template]="step.kafkaPayload ?? ''"></app-template-preview>
                   </div>
                 }
 
@@ -175,6 +178,7 @@ interface InlineCondition {
                       <mat-label>Body</mat-label>
                       <textarea matInput rows="3" [(ngModel)]="step.httpBody" (ngModelChange)="triggerSave()"></textarea>
                     </mat-form-field>
+                    <app-template-preview [template]="step.httpBody ?? ''"></app-template-preview>
                   </div>
                 }
 

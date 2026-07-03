@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
-import { writeFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { ConfigService } from './config.service';
@@ -153,6 +153,35 @@ parameterSets: []
       expect(existsSync(`${path}.tmp`)).toBe(false);
     });
 
+    it('resolves ${ENV_VAR} placeholders in the in-memory config immediately, without waiting for a reload', async () => {
+      process.env['TEST_WRITE_SECRET'] = 'resolved-value';
+      const path = tmpFile('write-env-var.yaml');
+      writeFileSync(path, makeYaml(MINIMAL_CONFIG), 'utf8');
+      await service.load(path);
+
+      const withPlaceholder: Config = {
+        ...MINIMAL_CONFIG,
+        modules: [
+          {
+            id: 'kafka1', name: 'Kafka', type: 'kafka',
+            config: { brokers: ['kafka:9092'], sasl: { mechanism: 'PLAIN', username: '${TEST_WRITE_SECRET}', password: 'x' } },
+          },
+        ],
+      };
+      await service.write(withPlaceholder);
+
+      // The file on disk keeps the literal placeholder (portable, no secrets committed)...
+      const onDisk = readFileSync(path, 'utf8');
+      expect(onDisk).toContain('${TEST_WRITE_SECRET}');
+
+      // ...but the in-memory copy everything else reads must already be resolved.
+      const current = service.getCurrent();
+      const sasl = (current?.modules[0].config as { sasl?: { username?: string } }).sasl;
+      expect(sasl?.username).toBe('resolved-value');
+
+      delete process.env['TEST_WRITE_SECRET'];
+    });
+
     it('throws on duplicate service ports', async () => {
       const path = tmpFile('dup-ports.yaml');
       writeFileSync(path, makeYaml(MINIMAL_CONFIG), 'utf8');
@@ -207,7 +236,7 @@ parameterSets: []
       // Clean up tmp files
       const dir = join(tmpdir(), 'mockingbird-test');
       const files = ['valid.yaml', 'env-vars.yaml', 'missing-env.yaml', 'empty.yaml',
-        'no-services.yaml', 'write-test.yaml', 'dup-ports.yaml', 'no-id.yaml', 'bad-port.yaml'];
+        'no-services.yaml', 'write-test.yaml', 'write-env-var.yaml', 'dup-ports.yaml', 'no-id.yaml', 'bad-port.yaml'];
       for (const f of files) {
         const p = join(dir, f);
         if (existsSync(p)) try { unlinkSync(p); } catch { /* ignore */ }

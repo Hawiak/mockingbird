@@ -10,6 +10,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import type { ResponseBlockDto, CreateResponseBlockDto } from '@mockingbird/shared-types';
+import { TemplatePreviewComponent } from '../../components/template-preview.component';
 
 interface HeaderPair { key: string; value: string; }
 
@@ -26,6 +27,7 @@ interface HeaderPair { key: string; value: string; }
     MatInputModule,
     MatTooltipModule,
     MatSnackBarModule,
+    TemplatePreviewComponent,
   ],
   template: `
     <!-- Drawer overlay -->
@@ -77,6 +79,8 @@ interface HeaderPair { key: string; value: string; }
             <mat-label>Body</mat-label>
             <textarea matInput rows="10" [(ngModel)]="formBody" placeholder='{"message": "OK"}'></textarea>
           </mat-form-field>
+
+          <app-template-preview [template]="formBody"></app-template-preview>
         </div>
         <div class="drawer-foot">
           <button class="btn-cancel" (click)="closeDrawer()">Cancel</button>

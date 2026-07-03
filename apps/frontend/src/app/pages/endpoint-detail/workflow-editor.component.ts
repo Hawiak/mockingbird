@@ -13,6 +13,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import type { WorkflowAction, ActionType, ModuleDto } from '@mockingbird/shared-types';
+import { TemplatePreviewComponent } from '../../components/template-preview.component';
 
 const ACTION_COLORS: Record<ActionType, string> = {
   respond: '#22c55e',
@@ -40,6 +41,7 @@ const ACTION_COLORS: Record<ActionType, string> = {
     MatButtonToggleModule,
     MatMenuModule,
     MatTooltipModule,
+    TemplatePreviewComponent,
   ],
   template: `
     <div class="workflow-editor">
@@ -88,6 +90,9 @@ const ACTION_COLORS: Record<ActionType, string> = {
                           <mat-label>Body</mat-label>
                           <textarea matInput rows="4" [(ngModel)]="action.body" (ngModelChange)="emit()"></textarea>
                         </mat-form-field>
+                      }
+                      @if (action.mode === 'template') {
+                        <app-template-preview [template]="action.body ?? ''"></app-template-preview>
                       }
                     </div>
                   }

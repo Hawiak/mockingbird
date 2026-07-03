@@ -75,8 +75,12 @@ export class ModulesController {
     updated.modules.push(mod);
     await this.configService.write(updated);
     try {
-      await this.moduleRegistry.configure(mod);
-      if (mod.type === 'kafka') await this.kafkaListener.reload(mod);
+      // Connect using the resolved (post-write) config, not the literal
+      // ${VAR} placeholders that may still be in the local `mod` object —
+      // write() only resolves getCurrent(), not the object passed into it.
+      const resolvedMod = this.configService.getCurrent()!.modules.find(m => m.id === mod.id)!;
+      await this.moduleRegistry.configure(resolvedMod);
+      if (resolvedMod.type === 'kafka') await this.kafkaListener.reload(resolvedMod);
     } catch {
       // non-fatal: module is saved, just not yet connected
     }
@@ -108,8 +112,11 @@ export class ModulesController {
     }
     await this.configService.write(updated);
     try {
-      await this.moduleRegistry.configure(updated.modules[idx]);
-      if (updated.modules[idx].type === 'kafka') await this.kafkaListener.reload(updated.modules[idx]);
+      // Same reasoning as create(): connect with the resolved config, not
+      // whatever literal ${VAR} placeholders were in the request body.
+      const resolvedMod = this.configService.getCurrent()!.modules.find(m => m.id === id)!;
+      await this.moduleRegistry.configure(resolvedMod);
+      if (resolvedMod.type === 'kafka') await this.kafkaListener.reload(resolvedMod);
     } catch {
       // non-fatal
     }

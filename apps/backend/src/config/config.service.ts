@@ -91,9 +91,14 @@ export class ConfigService {
   async write(config: Config): Promise<void> {
     if (!this.configPath) throw new Error('ConfigService not initialised — call load() first');
     this.validate(config);
+    // Persist the literal ${VAR} placeholders to disk (portable, no secrets
+    // committed) — but resolve them for the in-memory copy immediately, same
+    // as load() does. Without this, every consumer of getCurrent() (module
+    // connections, template rendering, etc.) would see unresolved literal
+    // "${VAR}" strings until the config-file watcher's next reload catches up.
     const yaml = dump(config, { lineWidth: 120, noRefs: true });
     writeFileSync(this.configPath, yaml, 'utf8');
-    this.current = config;
+    this.current = this.resolveEnvVars(config) as Config;
   }
 
   private validate(config: Config): void {
