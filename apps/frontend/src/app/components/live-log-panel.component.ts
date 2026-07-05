@@ -57,7 +57,7 @@ import type { LogEntryDto } from '@mockingbird/shared-types';
         <div class="lp-row-meta">
           <span>{{ entry.serviceName || entry.serviceId }}</span>
           <span class="lp-match-tag" [class.lp-match-hit]="entry.matched" [class.lp-match-miss]="!entry.matched">
-            {{ entry.matched ? (entry.statementName || 'statement') : 'default' }}
+            {{ entry.matched ? 'matched' : 'default' }}
           </span>
           <span>{{ entry.timestamp | date:'HH:mm:ss' }}</span>
         </div>
@@ -68,9 +68,9 @@ import type { LogEntryDto } from '@mockingbird/shared-types';
               <div class="lp-section-title">Why</div>
               <div class="lp-why">
                 @if (entry.matched) {
-                  <span class="lp-why-match">Matched statement: <strong>{{ entry.statementName || entry.statementId }}</strong></span>
+                  <span class="lp-why-match">Response matched</span>
                 } @else {
-                  <span class="lp-why-default">No statement matched — returned default response</span>
+                  <span class="lp-why-default">No response configured — returned default response</span>
                 }
               </div>
             </div>

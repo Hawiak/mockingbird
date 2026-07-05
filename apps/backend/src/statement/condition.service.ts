@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { JSONPath } from 'jsonpath-plus';
 import { select } from 'xpath';
 import { DOMParser } from '@xmldom/xmldom';
 import type { Condition, ConditionLeaf, ConditionGroup, RequestContext } from '@mockingbird/shared-types';
+import { StateStoreService } from '../data-store/state-store.service';
 
 @Injectable()
 export class ConditionService {
+  constructor(@Optional() private readonly stateStoreService?: StateStoreService) {}
+
   evaluate(condition: Condition, ctx: RequestContext): boolean {
     if ('operator' in condition) {
       return this.evaluateGroup(condition as ConditionGroup, ctx);
@@ -49,6 +52,13 @@ export class ConditionService {
         } catch { return undefined; }
       }
       case 'request.count': return String(ctx.callCount);
+      case 'store.exists': {
+        // `param` doubles as the path param name used as the record key (see ConditionLeaf.store doc).
+        if (!this.stateStoreService || !leaf.store || !leaf.param) return undefined;
+        const key = ctx.pathParams[leaf.param];
+        if (key === undefined) return undefined;
+        return this.stateStoreService.has(leaf.store, key) ? key : undefined;
+      }
       default: return undefined;
     }
   }

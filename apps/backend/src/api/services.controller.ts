@@ -18,6 +18,7 @@ import { MockServerService } from '../mock/mock-server.service';
 import {
   CreateServiceBodyDto,
   UpdateServiceBodyDto,
+  UpdateSpecBodyDto,
   RemapBodyDto,
 } from './dto';
 
@@ -50,7 +51,7 @@ export class ServicesController {
     };
 
     if ((service.spec.type === 'upload' || service.spec.type === 'hosted') && dto.specContent) {
-      this.swaggerLoader.saveSpecContent(service.id, dto.specContent);
+      service.spec = { ...service.spec, specContent: dto.specContent };
     }
 
     // Resolve the spec and populate endpoints *before* writing, so the
@@ -64,7 +65,6 @@ export class ServicesController {
         id: randomUUID(),
         method: ep.method,
         path: ep.path,
-        statements: [],
       }));
     } catch (e: unknown) {
       this.logger.warn(`Failed to load spec for new service "${service.name}": ${(e as Error).message}`);
@@ -123,6 +123,28 @@ export class ServicesController {
     return { endpointCount: spec.endpoints.length };
   }
 
+  /** Pushes fresh spec content (upload/hosted) or a new URL, persists it, and re-parses/merges endpoints. */
+  @Put(':id/spec')
+  async updateSpec(@Param('id') id: string, @Body() dto: UpdateSpecBodyDto): Promise<{ endpointCount: number }> {
+    const config = this.configService.getCurrent()!;
+    const updated: Config = JSON.parse(JSON.stringify(config));
+    const service = updated.services.find(s => s.id === id);
+    if (!service) throw new NotFoundException(`Service ${id} not found`);
+
+    if (dto.specContent !== undefined) service.spec = { ...service.spec, specContent: dto.specContent };
+    if (dto.url !== undefined) service.spec = { ...service.spec, url: dto.url };
+
+    const spec = await this.swaggerLoader.load(service);
+    service.endpoints = spec.endpoints.map(ep => {
+      const existing = service.endpoints.find(e => e.method === ep.method && e.path === ep.path);
+      return existing ?? { id: randomUUID(), method: ep.method, path: ep.path };
+    });
+
+    await this.configService.write(updated);
+    await this.mockServer.reload(service, spec);
+    return { endpointCount: spec.endpoints.length };
+  }
+
   @Get(':id/orphaned-endpoints')
   getOrphaned(@Param('id') id: string): OrphanedEndpointDto[] {
     return this.specDrift.getOrphaned(id);
@@ -153,15 +175,15 @@ export class ServicesController {
       );
     }
 
-    // Move statements to target
-    tgtEndpoint.statements = [
-      ...(tgtEndpoint.statements ?? []),
-      ...(srcEndpoint.statements ?? []),
-    ];
-
-    // Move default response block if target doesn't already have one
-    if (srcEndpoint.defaultResponseBlockId && !tgtEndpoint.defaultResponseBlockId) {
-      tgtEndpoint.defaultResponseBlockId = srcEndpoint.defaultResponseBlockId;
+    // Move the response config to target — if target doesn't have one yet, adopt
+    // source's outright; otherwise chain source's onto the tail of target's
+    // else-chain so target's existing behavior still takes priority.
+    if (!tgtEndpoint.responseNode) {
+      tgtEndpoint.responseNode = srcEndpoint.responseNode;
+    } else if (srcEndpoint.responseNode) {
+      let tail = tgtEndpoint.responseNode;
+      while (tail.else) tail = tail.else;
+      tail.else = srcEndpoint.responseNode;
     }
 
     // Remove source endpoint

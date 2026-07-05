@@ -13,8 +13,7 @@ import type {
   SpecSource,
   CorsConfig,
   ProxyConfig,
-  Condition,
-  WorkflowAction,
+  ResponseNode,
 } from '@mockingbird/shared-types';
 
 // ─── Service ───────────────────────────────────────────────────────────────
@@ -68,6 +67,16 @@ export class UpdateServiceBodyDto {
   proxy?: ProxyConfig;
 }
 
+export class UpdateSpecBodyDto {
+  @IsOptional()
+  @IsString()
+  specContent?: string;
+
+  @IsOptional()
+  @IsString()
+  url?: string;
+}
+
 // ─── Endpoint ──────────────────────────────────────────────────────────────
 
 export class UpdateEndpointBodyDto {
@@ -80,56 +89,8 @@ export class UpdateEndpointBodyDto {
   proxy?: ProxyConfig | { enabled: false };
 
   @IsOptional()
-  @IsString()
-  defaultResponseBlockId?: string;
-
-  @IsOptional()
-  @IsString()
-  workflowId?: string;
-}
-
-// ─── Statement ─────────────────────────────────────────────────────────────
-
-export class CreateStatementBodyDto {
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsNumber()
-  priority!: number;
-
   @IsObject()
-  condition!: Condition;
-
-  @IsArray()
-  workflow!: WorkflowAction[];
-}
-
-export class UpdateStatementBodyDto {
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @IsOptional()
-  @IsNumber()
-  priority?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  enabled?: boolean;
-
-  @IsOptional()
-  @IsObject()
-  condition?: Condition;
-
-  @IsOptional()
-  @IsArray()
-  workflow?: WorkflowAction[];
-}
-
-export class ReorderBodyDto {
-  @IsNumber()
-  priority!: number;
+  responseNode?: ResponseNode;
 }
 
 // ─── Response Block ────────────────────────────────────────────────────────
@@ -265,6 +226,10 @@ export class CreateResponseWorkflowBodyDto {
   @IsOptional()
   @IsArray()
   steps?: any[];
+
+  @IsOptional()
+  @IsArray()
+  parameters?: any[];
 }
 
 export class UpdateResponseWorkflowBodyDto {
@@ -275,6 +240,10 @@ export class UpdateResponseWorkflowBodyDto {
   @IsOptional()
   @IsArray()
   steps?: any[];
+
+  @IsOptional()
+  @IsArray()
+  parameters?: any[];
 }
 
 // ─── Saved Condition ───────────────────────────────────────────────────────
@@ -295,4 +264,25 @@ export class UpdateSavedConditionBodyDto {
   @IsOptional()
   @IsObject()
   condition?: any;
+}
+
+// ─── Data Store ────────────────────────────────────────────────────────────
+
+export class CreateDataStoreBodyDto {
+  @IsString()
+  name!: string;
+
+  @IsOptional()
+  @IsObject()
+  seedRecords?: Record<string, unknown>;
+}
+
+export class UpdateDataStoreBodyDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsObject()
+  seedRecords?: Record<string, unknown>;
 }

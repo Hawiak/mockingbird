@@ -8,17 +8,15 @@ import type {
   Config,
   RequestContext,
   TemplateContext,
-  Statement,
   WorkflowLogEntry,
   LogEntryDto,
 } from '@mockingbird/shared-types';
 import { ConfigService } from '../config/config.service';
 import { ConfigWatcherService } from '../config/config-watcher.service';
 import { ConditionService } from '../statement/condition.service';
-import { StatementMatcherService } from '../statement/statement-matcher.service';
 import { WorkflowExecutorService } from '../workflow/workflow-executor.service';
 import { TemplateService } from '../workflow/template.service';
-import { resolveWorkflowActions } from '../workflow/response-workflow-resolver';
+import { resolveResponseNode, flattenWorkflowActions } from '../workflow/response-node-resolver';
 import { LogService } from '../log/log.service';
 import { LogGateway } from '../log/log.gateway';
 import { createCorsMiddleware } from './cors.middleware';
@@ -33,7 +31,6 @@ export class MockServerService implements OnModuleInit {
     private readonly configWatcher: ConfigWatcherService,
     private readonly configService: ConfigService,
     private readonly conditionService: ConditionService,
-    private readonly statementMatcher: StatementMatcherService,
     private readonly workflowExecutor: WorkflowExecutorService,
     private readonly templateService: TemplateService,
     private readonly logService: LogService,
@@ -108,82 +105,37 @@ export class MockServerService implements OnModuleInit {
           };
 
           const workflowLog: WorkflowLogEntry[] = [];
-          let matchedStatement: Statement | null = null;
+          let matched = false;
 
           if (liveEndpoint?.disabled) {
             res.status(404).json({ error: 'Endpoint disabled' });
-          } else if (liveEndpoint?.workflowId) {
-            const wf = liveConfig.responseWorkflows?.find(w => w.id === liveEndpoint!.workflowId);
-            if (wf) {
-              const actions = resolveWorkflowActions(wf, ctx, liveConfig, this.conditionService);
+          } else if (liveEndpoint?.responseNode) {
+            const resolved = resolveResponseNode(liveEndpoint.responseNode, ctx, liveConfig, this.conditionService);
+            if (resolved) {
+              const actions = flattenWorkflowActions(resolved, ctx, this.conditionService);
+              matched = actions.length > 0;
 
               const paramSets: Record<string, Record<string, string>> = {};
-              const tplCtx: import('@mockingbird/shared-types').TemplateContext = {
-                request: ctx,
-                parameterSets: paramSets,
-              };
+              for (const setId of actions.flatMap(a => a.parameterSets ?? [])) {
+                const ps = liveConfig.parameterSets.find(p => p.id === setId);
+                if (ps) paramSets[ps.name] = ps.values;
+              }
+              const templateCtx: TemplateContext = { request: ctx, parameterSets: paramSets };
 
               if (actions.length > 0) {
                 await this.workflowExecutor.execute(
-                  actions, tplCtx, req, res, liveConfig.responseBlocks ?? [], workflowLog,
+                  actions, templateCtx, req, res, liveConfig.responseBlocks ?? [], workflowLog,
                 );
-              } else {
-                // No matching steps — 200 empty fallback
-                res.status(200).json({});
               }
-            } else {
-              res.status(404).json({ error: 'Workflow not found' });
             }
-          } else if (liveEndpoint && liveEndpoint.statements?.length) {
-            matchedStatement = this.statementMatcher.match(liveEndpoint.statements, ctx);
           }
 
-          if (matchedStatement) {
-            // Build parameter sets context
-            const paramSets: Record<string, Record<string, string>> = {};
-            for (const setId of matchedStatement.workflow.flatMap(a => a.parameterSets ?? [])) {
-              const ps = liveConfig.parameterSets.find(p => p.id === setId);
-              if (ps) paramSets[ps.name] = ps.values;
-            }
-
-            const templateCtx: TemplateContext = { request: ctx, parameterSets: paramSets };
-
-            await this.workflowExecutor.execute(
-              matchedStatement.workflow,
-              templateCtx,
-              req,
-              res,
-              liveConfig.responseBlocks,
-              workflowLog,
-            );
-          }
-
-          // If no response was sent (no match, or workflow had no respond/proxy), serve default
+          // If no response was sent (no responseNode, no match, or workflow had no respond/proxy), serve the spec-generated default
           if (!res.headersSent) {
-            const defaultBlockId = liveEndpoint?.defaultResponseBlockId;
-            const defaultBlock = defaultBlockId
-              ? (liveConfig.responseBlocks ?? []).find(b => b.id === defaultBlockId)
-              : undefined;
-            if (!defaultBlock && defaultBlockId) {
-              this.logger.warn(
-                `[default] ${capturedEndpoint.method}:${capturedEndpoint.path} ` +
-                `blockId=${defaultBlockId} not found — falling back to spec default`,
-              );
-            }
-            // Build template context for default block rendering
-            const defaultTemplateCtx: TemplateContext = {
-              request: ctx,
-              parameterSets: {},
-            };
-            if (defaultBlock) {
-              for (const [k, v] of Object.entries(defaultBlock.headers)) res.setHeader(k, v);
-              const body = this.templateService.render(defaultBlock.body ?? '', defaultTemplateCtx).output;
-              res.status(defaultBlock.statusCode).send(body);
-            } else {
-              for (const [k, v] of Object.entries(capturedEndpoint.defaultHeaders)) res.setHeader(k, v);
-              const body = this.templateService.render(capturedEndpoint.defaultBody ?? '', defaultTemplateCtx).output;
-              res.status(capturedEndpoint.defaultStatusCode).send(body);
-            }
+            const defaultTemplateCtx: TemplateContext = { request: ctx, parameterSets: {} };
+            for (const [k, v] of Object.entries(capturedEndpoint.defaultHeaders)) res.setHeader(k, v);
+            const body = this.templateService.render(capturedEndpoint.defaultBody ?? '', defaultTemplateCtx).output;
+            res.status(capturedEndpoint.defaultStatusCode).send(body);
           }
 
           // Log the request
@@ -196,9 +148,7 @@ export class MockServerService implements OnModuleInit {
             path: req.path,
             statusCode: res.statusCode,
             durationMs: Date.now() - start,
-            matched: matchedStatement !== null,
-            statementId: matchedStatement?.id,
-            statementName: matchedStatement?.name,
+            matched,
             request: {
               headers: req.headers as Record<string, string>,
               query: req.query as Record<string, string>,
@@ -278,7 +228,7 @@ export class MockServerService implements OnModuleInit {
 
       const portChanged = oldSvc.port !== newSvc.port;
 
-      // Statements are read live at request time — only stop if routes (method+path) change
+      // responseNode is read live at request time — only stop if routes (method+path) change
       const oldRoutes = this.toRouteSet(oldSvc);
       const newRoutes = this.toRouteSet(newSvc);
       const routesChanged =

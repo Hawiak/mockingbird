@@ -138,6 +138,62 @@ parameterSets: []
 
       expect(config.services).toEqual([]);
     });
+
+    describe('built-in workflow seeding', () => {
+      const BUILTIN_IDS = [
+        'builtin-list-entity', 'builtin-fetch-entity', 'builtin-create-entity',
+        'builtin-edit-entity', 'builtin-delete-entity',
+      ];
+
+      it('seeds all 5 built-in CRUD workflows into a fresh config', async () => {
+        const path = tmpFile('builtin-fresh.yaml');
+        writeFileSync(path, makeYaml(MINIMAL_CONFIG), 'utf8');
+
+        const config = await service.load(path);
+
+        const ids = (config.responseWorkflows ?? []).map(w => w.id);
+        for (const id of BUILTIN_IDS) expect(ids).toContain(id);
+      });
+
+      it('does not duplicate built-ins already present in the config', async () => {
+        const path = tmpFile('builtin-idempotent.yaml');
+        writeFileSync(path, makeYaml(MINIMAL_CONFIG), 'utf8');
+        const first = await service.load(path);
+        const countAfterFirstLoad = (first.responseWorkflows ?? []).length;
+
+        // Re-load the same path with a fresh service instance, simulating a
+        // second startup against a config that already has the built-ins
+        // (and, notably, other user workflows too — the seed must not be
+        // gated on the array being empty).
+        const module: TestingModule = await Test.createTestingModule({
+          providers: [ConfigService],
+        }).compile();
+        const service2 = module.get<ConfigService>(ConfigService);
+        const second = await service2.load(path);
+
+        expect((second.responseWorkflows ?? []).length).toBe(countAfterFirstLoad);
+      });
+
+      it('re-adds a built-in that is missing while leaving other workflows untouched', async () => {
+        const path = tmpFile('builtin-partial.yaml');
+        const raw: Config = {
+          ...MINIMAL_CONFIG,
+          responseWorkflows: [
+            { id: 'custom-1', name: 'My Custom Workflow', steps: [] },
+            { id: 'builtin-list-entity', name: 'List <Entity>', builtIn: true, steps: [] },
+          ],
+        };
+        writeFileSync(path, makeYaml(raw), 'utf8');
+
+        const config = await service.load(path);
+        const ids = (config.responseWorkflows ?? []).map(w => w.id);
+
+        expect(ids).toContain('custom-1');
+        for (const id of BUILTIN_IDS) expect(ids).toContain(id);
+        // No duplicate of the one that was already present
+        expect(ids.filter(id => id === 'builtin-list-entity').length).toBe(1);
+      });
+    });
   });
 
   describe('write()', () => {
@@ -236,7 +292,8 @@ parameterSets: []
       // Clean up tmp files
       const dir = join(tmpdir(), 'mockingbird-test');
       const files = ['valid.yaml', 'env-vars.yaml', 'missing-env.yaml', 'empty.yaml',
-        'no-services.yaml', 'write-test.yaml', 'write-env-var.yaml', 'dup-ports.yaml', 'no-id.yaml', 'bad-port.yaml'];
+        'no-services.yaml', 'write-test.yaml', 'write-env-var.yaml', 'dup-ports.yaml', 'no-id.yaml', 'bad-port.yaml',
+        'builtin-fresh.yaml', 'builtin-idempotent.yaml', 'builtin-partial.yaml'];
       for (const f of files) {
         const p = join(dir, f);
         if (existsSync(p)) try { unlinkSync(p); } catch { /* ignore */ }

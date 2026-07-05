@@ -73,6 +73,23 @@ export class TemplateService {
         return ctx.response.headers[expr.slice('response.header.'.length).toLowerCase()];
       }
     }
+    // store.<name> (whole record/list, JSON-stringified) or store.<name>.<jsonpath>
+    // (JSONPath into it) — populated mid-workflow by a preceding store_fetch action.
+    if (expr.startsWith('store.')) {
+      const rest = expr.slice('store.'.length);
+      const dotIdx2 = rest.indexOf('.');
+      const storeName = dotIdx2 === -1 ? rest : rest.slice(0, dotIdx2);
+      const record = ctx.stores?.[storeName];
+      if (record === undefined) return undefined;
+      if (dotIdx2 === -1) return JSON.stringify(record);
+      const path = rest.slice(dotIdx2 + 1);
+      try {
+        const results = JSONPath({ path, json: record as object }) as unknown[];
+        return results.length > 0 ? String(results[0]) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
     // Check parameter sets: expr = "setName.key"
     const dotIdx = expr.indexOf('.');
     if (dotIdx > 0) {

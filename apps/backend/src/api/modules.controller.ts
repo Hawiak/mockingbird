@@ -16,6 +16,8 @@ import type {
   TestConnectionResultDto,
   KafkaModuleConfig,
   TemplateContext,
+  ResponseNode,
+  WorkflowAction,
 } from '@mockingbird/shared-types';
 import { ConfigService } from '../config/config.service';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
@@ -43,15 +45,33 @@ export class ModulesController {
     let usedByCount = 0;
     for (const svc of config.services) {
       for (const ep of svc.endpoints) {
-        for (const stmt of ep.statements ?? []) {
-          for (const action of stmt.workflow ?? []) {
-            if (action.module === mod.id) usedByCount++;
-          }
-        }
+        if (ep.responseNode) usedByCount += this.countModuleUsageInNode(ep.responseNode, mod.id);
       }
     }
 
     return { ...mod, health, usedByCount };
+  }
+
+  /** Recurses through inline actions (including nested if_else/switch branches) to count module references. */
+  private countModuleUsageInActions(actions: WorkflowAction[], moduleId: string): number {
+    let count = 0;
+    for (const action of actions) {
+      if (action.module === moduleId) count++;
+      if (action.then) count += this.countModuleUsageInActions(action.then, moduleId);
+      if (action.else) count += this.countModuleUsageInActions(action.else, moduleId);
+      for (const c of action.cases ?? []) count += this.countModuleUsageInActions(c.actions, moduleId);
+      if (action.default) count += this.countModuleUsageInActions(action.default, moduleId);
+    }
+    return count;
+  }
+
+  private countModuleUsageInNode(node: ResponseNode, moduleId: string): number {
+    let count = 0;
+    if (node.kind === 'workflow' && (node.workflowMode ?? 'inline') === 'inline') {
+      count += this.countModuleUsageInActions(node.actions ?? [], moduleId);
+    }
+    if (node.else) count += this.countModuleUsageInNode(node.else, moduleId);
+    return count;
   }
 
   @Get()

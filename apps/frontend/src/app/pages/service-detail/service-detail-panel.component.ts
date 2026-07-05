@@ -66,8 +66,8 @@ import type { ServiceDto, EndpointDto } from '@mockingbird/shared-types';
             (click)="navigate(ep.id)">
             <span class="method-tag method-{{ ep.method.toLowerCase() }}">{{ ep.method }}</span>
             <span class="ep-path">{{ ep.path }}</span>
-            @if ((ep.statements?.length ?? 0) > 0) {
-              <span class="stmt-badge">{{ ep.statements!.length }}</span>
+            @if (ep.responseNode) {
+              <span class="stmt-badge" title="Response configured">&#x2713;</span>
             }
           </div>
         }

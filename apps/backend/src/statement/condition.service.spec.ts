@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ConditionService } from './condition.service';
+import { StateStoreService } from '../data-store/state-store.service';
 import type { RequestContext, ConditionLeaf, ConditionGroup, Condition } from '@mockingbird/shared-types';
 
 function makeCtx(overrides: Partial<RequestContext> = {}): RequestContext {
@@ -484,6 +485,45 @@ describe('ConditionService', () => {
         ],
       };
       expect(service.evaluate(condition, ctx)).toBe(true);
+    });
+  });
+
+  // ─── store.exists ─────────────────────────────────────────────────────────
+
+  describe('store.exists', () => {
+    it('key present in store → exists=true', () => {
+      const stateStore = new StateStoreService({ getCurrent: () => null } as never);
+      stateStore.set('orders', '42', { id: '42' });
+      const withStore = new ConditionService(stateStore);
+      const ctx = makeCtx({ pathParams: { id: '42' } });
+      const condition: ConditionLeaf = { type: 'store.exists', op: 'exists', param: 'id', store: 'orders' };
+      expect(withStore.evaluate(condition, ctx)).toBe(true);
+    });
+
+    it('key absent from store → exists=false, not_exists=true', () => {
+      const stateStore = new StateStoreService({ getCurrent: () => null } as never);
+      const withStore = new ConditionService(stateStore);
+      const ctx = makeCtx({ pathParams: { id: '99' } });
+      const existsCond: ConditionLeaf = { type: 'store.exists', op: 'exists', param: 'id', store: 'orders' };
+      const notExistsCond: ConditionLeaf = { type: 'store.exists', op: 'not_exists', param: 'id', store: 'orders' };
+      expect(withStore.evaluate(existsCond, ctx)).toBe(false);
+      expect(withStore.evaluate(notExistsCond, ctx)).toBe(true);
+    });
+
+    it('no path param present → treated as not existing', () => {
+      const stateStore = new StateStoreService({ getCurrent: () => null } as never);
+      stateStore.set('orders', '42', { id: '42' });
+      const withStore = new ConditionService(stateStore);
+      const ctx = makeCtx({ pathParams: {} });
+      const condition: ConditionLeaf = { type: 'store.exists', op: 'exists', param: 'id', store: 'orders' };
+      expect(withStore.evaluate(condition, ctx)).toBe(false);
+    });
+
+    it('missing StateStoreService (optional dep not provided) → quietly false, no throw', () => {
+      const ctx = makeCtx({ pathParams: { id: '42' } });
+      const condition: ConditionLeaf = { type: 'store.exists', op: 'exists', param: 'id', store: 'orders' };
+      expect(() => service.evaluate(condition, ctx)).not.toThrow();
+      expect(service.evaluate(condition, ctx)).toBe(false);
     });
   });
 });

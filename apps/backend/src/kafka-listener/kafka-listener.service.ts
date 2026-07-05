@@ -14,9 +14,8 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { KafkaModuleImpl } from '../module-registry/modules/kafka.module-impl';
 import { ConfigService } from '../config/config.service';
 import { ConditionService } from '../statement/condition.service';
-import { StatementMatcherService } from '../statement/statement-matcher.service';
 import { WorkflowExecutorService } from '../workflow/workflow-executor.service';
-import { resolveWorkflowActions } from '../workflow/response-workflow-resolver';
+import { resolveResponseNode, flattenWorkflowActions } from '../workflow/response-node-resolver';
 import { LogService } from '../log/log.service';
 import { LogGateway } from '../log/log.gateway';
 
@@ -44,7 +43,6 @@ export class KafkaListenerService {
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly configService: ConfigService,
     private readonly conditionService: ConditionService,
-    private readonly statementMatcher: StatementMatcherService,
     private readonly workflowExecutor: WorkflowExecutorService,
     private readonly logService: LogService,
     private readonly logGateway: LogGateway,
@@ -141,46 +139,24 @@ export class KafkaListenerService {
 
     const workflowLog: WorkflowLogEntry[] = [];
     let matched = false;
-    let matchedId: string | undefined;
-    let matchedName: string | undefined;
 
-    if (liveListener?.workflowId && liveConfig) {
-      // Triggered by a shared Response Workflow instead of this listener's own statements.
-      const wf = liveConfig.responseWorkflows?.find(w => w.id === liveListener.workflowId);
-      if (wf) {
-        const actions = resolveWorkflowActions(wf, ctx, liveConfig, this.conditionService);
+    if (liveListener?.responseNode && liveConfig) {
+      const resolved = resolveResponseNode(liveListener.responseNode, ctx, liveConfig, this.conditionService);
+      if (resolved) {
+        const actions = flattenWorkflowActions(resolved, ctx, this.conditionService);
         matched = actions.length > 0;
-        matchedId = wf.id;
-        matchedName = wf.name;
         if (actions.length > 0) {
-          const templateCtx: TemplateContext = { request: ctx, parameterSets: {} };
+          const paramSets: Record<string, Record<string, string>> = {};
+          for (const setId of actions.flatMap(a => a.parameterSets ?? [])) {
+            const ps = liveConfig.parameterSets.find(p => p.id === setId);
+            if (ps) paramSets[ps.name] = ps.values;
+          }
+          const templateCtx: TemplateContext = { request: ctx, parameterSets: paramSets };
           try {
             await this.workflowExecutor.executeFireAndForget(actions, templateCtx, workflowLog);
           } catch (e: unknown) {
             this.logger.error(`Kafka listener workflow failed for topic "${msg.topic}": ${(e as Error).message}`);
           }
-        }
-      } else {
-        this.logger.warn(`Kafka listener workflow "${liveListener.workflowId}" not found`);
-      }
-    } else {
-      const statements = liveListener?.statements ?? [];
-      const matchedStatement = this.statementMatcher.match(statements, ctx);
-      matched = matchedStatement !== null;
-      matchedId = matchedStatement?.id;
-      matchedName = matchedStatement?.name;
-
-      if (matchedStatement) {
-        const paramSets: Record<string, Record<string, string>> = {};
-        for (const setId of matchedStatement.workflow.flatMap(a => a.parameterSets ?? [])) {
-          const ps = liveConfig?.parameterSets.find(p => p.id === setId);
-          if (ps) paramSets[ps.name] = ps.values;
-        }
-        const templateCtx: TemplateContext = { request: ctx, parameterSets: paramSets };
-        try {
-          await this.workflowExecutor.executeFireAndForget(matchedStatement.workflow, templateCtx, workflowLog);
-        } catch (e: unknown) {
-          this.logger.error(`Kafka listener workflow failed for topic "${msg.topic}": ${(e as Error).message}`);
         }
       }
     }
@@ -195,8 +171,6 @@ export class KafkaListenerService {
       statusCode: matched ? 200 : 204,
       durationMs: Date.now() - start,
       matched,
-      statementId: matchedId,
-      statementName: matchedName,
       request: {
         headers: ctx.headers,
         query: {},

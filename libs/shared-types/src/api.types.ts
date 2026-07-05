@@ -4,16 +4,17 @@ import type {
   CorsConfig,
   ProxyConfig,
   Endpoint,
-  Statement,
   Condition,
-  WorkflowAction,
+  ResponseNode,
   ResponseBlock,
   ModuleConfig,
   ModuleType,
   ParameterSet,
   ResponseWorkflow,
   ResponseWorkflowStep,
+  WorkflowParameter,
   SavedCondition,
+  DataStore,
 } from './config.types.js';
 
 // ─── Service ───────────────────────────────────────────────────────────────
@@ -37,29 +38,13 @@ export interface ServiceDto extends Service {}
 export interface UpdateEndpointDto {
   disabled?: boolean;
   proxy?: ProxyConfig | { enabled: false };
-  defaultResponseBlockId?: string;
-  workflowId?: string;
+  responseNode?: ResponseNode;
 }
 
 export interface EndpointDto extends Endpoint {
   serviceId: string;
   callCount: number;
 }
-
-// ─── Statement ─────────────────────────────────────────────────────────────
-
-export interface CreateStatementDto {
-  name?: string;
-  priority: number;
-  condition: Condition;
-  workflow: WorkflowAction[];
-}
-
-export interface UpdateStatementDto extends Partial<CreateStatementDto> {
-  enabled?: boolean;
-}
-
-export interface StatementDto extends Statement {}
 
 // ─── Response Block ────────────────────────────────────────────────────────
 
@@ -107,6 +92,24 @@ export interface UpdateParameterSetDto extends Partial<CreateParameterSetDto> {}
 
 export interface ParameterSetDto extends ParameterSet {}
 
+// ─── Data Store ────────────────────────────────────────────────────────────
+
+export interface CreateDataStoreDto {
+  name: string;
+  seedRecords?: Record<string, unknown>;
+}
+
+export interface UpdateDataStoreDto extends Partial<CreateDataStoreDto> {}
+
+export interface DataStoreDto extends DataStore {
+  recordCount: number;
+}
+
+export interface DataStoreRecordDto {
+  key: string;
+  value: unknown;
+}
+
 // ─── Request Log ───────────────────────────────────────────────────────────
 
 export interface LogEntryDto {
@@ -119,8 +122,6 @@ export interface LogEntryDto {
   statusCode: number;
   durationMs: number;
   matched: boolean;
-  statementId?: string;
-  statementName?: string;
   request: {
     headers: Record<string, string>;
     query: Record<string, string>;
@@ -147,7 +148,7 @@ export interface OrphanedEndpointDto {
   method: string;
   path: string;
   serviceId: string;
-  statementCount: number;
+  hasResponse: boolean;
 }
 
 export interface RemapEndpointDto {
@@ -184,11 +185,13 @@ export type ResponseWorkflowDto = ResponseWorkflow;
 export interface CreateResponseWorkflowDto {
   name: string;
   steps?: ResponseWorkflowStep[];
+  parameters?: WorkflowParameter[];
 }
 
 export interface UpdateResponseWorkflowDto {
   name?: string;
   steps?: ResponseWorkflowStep[];
+  parameters?: WorkflowParameter[];
 }
 
 // ─── Saved Condition ───────────────────────────────────────────────────────

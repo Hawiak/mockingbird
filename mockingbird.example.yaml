@@ -64,7 +64,7 @@ services:
 #       listeners:
 #         - id: orders-created
 #           topic: orders.created
-#           statements: []
+#           # responseNode: { id: n1, kind: workflow, actions: [...] }  — see docs/workflows.md
 #       triggers:
 #         - id: start-order
 #           name: Start Order

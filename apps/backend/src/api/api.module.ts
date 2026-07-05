@@ -9,7 +9,6 @@ import { LogModule } from '../log/log.module';
 import { SpecDriftService } from '../swagger/spec-drift.service';
 import { ServicesController } from './services.controller';
 import { EndpointsController } from './endpoints.controller';
-import { StatementsController } from './statements.controller';
 import { ResponseBlocksController } from './response-blocks.controller';
 import { ModulesController } from './modules.controller';
 import { ParameterSetsController } from './parameter-sets.controller';
@@ -19,6 +18,8 @@ import { HealthController } from './health.controller';
 import { ExportController } from './export.controller';
 import { ResponseWorkflowsController } from './response-workflows.controller';
 import { SavedConditionsController } from './saved-conditions.controller';
+import { DataStoresController } from './data-stores.controller';
+import { DataStoreModule } from '../data-store/data-store.module';
 
 @Module({
   imports: [
@@ -29,12 +30,12 @@ import { SavedConditionsController } from './saved-conditions.controller';
     KafkaListenerModule,
     MockModule,
     LogModule,
+    DataStoreModule,
   ],
   providers: [SpecDriftService],
   controllers: [
     ServicesController,
     EndpointsController,
-    StatementsController,
     ResponseBlocksController,
     ModulesController,
     ParameterSetsController,
@@ -44,6 +45,7 @@ import { SavedConditionsController } from './saved-conditions.controller';
     ExportController,
     ResponseWorkflowsController,
     SavedConditionsController,
+    DataStoresController,
   ],
 })
 export class ApiModule {}

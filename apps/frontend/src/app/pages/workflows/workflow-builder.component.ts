@@ -1,8 +1,7 @@
-import { Component, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, TemplateRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -11,22 +10,97 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { Subject, of } from 'rxjs';
 import { debounceTime, switchMap, takeUntil } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
 import type {
   ResponseWorkflowDto,
   ResponseWorkflowStep,
-  SavedConditionDto,
+  WorkflowParameter,
 } from '../../core/api.service';
-import type { ResponseBlockDto, ModuleDto } from '@mockingbird/shared-types';
+import type { ResponseBlockDto, ModuleDto, DataStoreDto, Condition } from '@mockingbird/shared-types';
 import { TemplatePreviewComponent } from '../../components/template-preview.component';
+import { WorkflowCanvasComponent, type PaletteBlock, type CanvasBranch } from '../../components/workflow-canvas.component';
+import { ConditionBuilderComponent } from '../endpoint-detail/condition-builder.component';
 
-interface InlineCondition {
-  type: string;
-  param: string;
-  op: string;
+interface StoreOption {
   value: string;
+  label: string;
+}
+
+const STEP_COLORS: Record<string, string> = {
+  return_response: '#22c55e',
+  use_module_action: '#f97316',
+  use_data_store: '#0ea5e9',
+  if_else: '#ec4899',
+  switch: '#8b5cf6',
+};
+
+const PALETTE: PaletteBlock[] = [
+  { type: 'return_response', label: 'Return Response', color: STEP_COLORS['return_response'] },
+  { type: 'use_module_action', label: 'Use Module Action', color: STEP_COLORS['use_module_action'] },
+  { type: 'use_data_store', label: 'Use Data Store', color: STEP_COLORS['use_data_store'] },
+  { type: 'if_else', label: 'If / Else', color: STEP_COLORS['if_else'] },
+  { type: 'switch', label: 'Switch', color: STEP_COLORS['switch'] },
+];
+
+function randomId(): string {
+  return Math.random().toString(36).slice(2, 11);
+}
+
+function createStep(type: string): ResponseWorkflowStep {
+  const base = { id: randomId(), order: 0 };
+  switch (type) {
+    case 'use_module_action': return { ...base, type: 'use_module_action' };
+    case 'use_data_store': return { ...base, type: 'use_data_store', storeOperation: 'fetch', storeFetchMode: 'single' };
+    case 'if_else': return { ...base, type: 'if_else', condition: { type: 'request.method', op: 'equals', value: 'GET' }, then: [], else: [] };
+    case 'switch': return { ...base, type: 'switch', cases: [], default: [] };
+    default: return { ...base, type: 'return_response' };
+  }
+}
+
+function getStepBranches(item: unknown): CanvasBranch[] | null {
+  const step = item as ResponseWorkflowStep;
+  if (step.type === 'if_else') {
+    return [
+      { key: 'then', label: 'Then', items: step.then ?? [] },
+      { key: 'else', label: 'Else', items: step.else ?? [] },
+    ];
+  }
+  if (step.type === 'switch') {
+    return [
+      ...(step.cases ?? []).map((c, i) => ({ key: `case:${c.id}`, label: `Case ${i + 1}`, items: c.steps })),
+      { key: 'default', label: 'Default', items: step.default ?? [] },
+    ];
+  }
+  return null;
+}
+
+function setStepBranch(item: unknown, key: string, items: unknown[]): unknown {
+  const step = item as ResponseWorkflowStep;
+  const steps = items as ResponseWorkflowStep[];
+  if (key === 'then') return { ...step, then: steps };
+  if (key === 'else') return { ...step, else: steps };
+  if (key === 'default') return { ...step, default: steps };
+  if (key.startsWith('case:')) {
+    const caseId = key.slice(5);
+    return { ...step, cases: (step.cases ?? []).map(c => (c.id === caseId ? { ...c, steps } : c)) };
+  }
+  return step;
+}
+
+/** Renumbers `order` to match array position, recursively through every nested branch — the resolver sorts by `order`, not array position. */
+function normalizeSteps(steps: ResponseWorkflowStep[]): ResponseWorkflowStep[] {
+  return steps.map((s, i) => {
+    const step: ResponseWorkflowStep = { ...s, order: i + 1 };
+    if (step.then) step.then = normalizeSteps(step.then);
+    if (step.else) step.else = normalizeSteps(step.else);
+    if (step.cases) step.cases = step.cases.map(c => ({ ...c, steps: normalizeSteps(c.steps) }));
+    if (step.default) step.default = normalizeSteps(step.default);
+    return step;
+  });
 }
 
 @Component({
@@ -36,7 +110,6 @@ interface InlineCondition {
     CommonModule,
     RouterModule,
     FormsModule,
-    DragDropModule,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -45,7 +118,11 @@ interface InlineCondition {
     MatSelectModule,
     MatTooltipModule,
     MatSnackBarModule,
+    MatButtonToggleModule,
+    MatCheckboxModule,
     TemplatePreviewComponent,
+    WorkflowCanvasComponent,
+    ConditionBuilderComponent,
   ],
   template: `
     <div class="builder-page">
@@ -74,235 +151,232 @@ interface InlineCondition {
           }
         </div>
 
-        <!-- Steps -->
-        <div
-          cdkDropList
-          (cdkDropListDropped)="dropStep($event)"
-          class="steps-list"
-        >
-          @for (step of workflow.steps; track step.id; let i = $index) {
-            <div class="step-card" cdkDrag>
-              <!-- Drag placeholder -->
-              <div class="cdk-drag-placeholder" *cdkDragPlaceholder></div>
-
-              <div class="step-drag" cdkDragHandle>
-                <span class="material-icons">drag_indicator</span>
-              </div>
-
-              <div class="step-content">
-                <!-- Step header row -->
-                <div class="step-header-row">
-                  <span class="step-number">Step {{ step.order }}</span>
-                  <button
-                    class="btn-icon-danger"
-                    (click)="deleteStep(step)"
-                    matTooltip="Delete step"
-                  >
-                    <span class="material-icons">delete</span>
-                  </button>
-                </div>
-
-                <!-- Main fields -->
-                <div class="step-fields">
-                  <mat-form-field appearance="outline" style="width:210px;flex-shrink:0">
-                    <mat-label>Type</mat-label>
-                    <mat-select [(ngModel)]="step.type" (ngModelChange)="triggerSave()">
-                      <mat-option value="return_response">Return Response</mat-option>
-                      <mat-option value="use_module_action">Use Module Action</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-
-                  @if (step.type === 'return_response') {
-                    <mat-form-field appearance="outline" style="flex:1;min-width:200px">
-                      <mat-label>Response Block</mat-label>
-                      <mat-select [(ngModel)]="step.responseBlockId" (ngModelChange)="triggerSave()">
-                        <mat-option value="">(none)</mat-option>
-                        @for (rb of responseBlocks; track rb.id) {
-                          <mat-option [value]="rb.id">{{ rb.name }} — {{ rb.statusCode }}</mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-                  }
-
-                  @if (step.type === 'use_module_action') {
-                    <mat-form-field appearance="outline" style="flex:1;min-width:200px">
-                      <mat-label>Module</mat-label>
-                      <mat-select [(ngModel)]="step.moduleId" (ngModelChange)="triggerSave()">
-                        <mat-option value="">(none)</mat-option>
-                        @for (mod of modules; track mod.id) {
-                          <mat-option [value]="mod.id">{{ mod.name }} ({{ mod.type }})</mat-option>
-                        }
-                      </mat-select>
-                    </mat-form-field>
-                  }
-                </div>
-
-                <!-- Module-specific fields -->
-                @if (step.type === 'use_module_action' && getModule(step.moduleId)?.type === 'kafka') {
-                  <div class="module-fields">
-                    <mat-form-field appearance="outline" class="full-width">
-                      <mat-label>Topic</mat-label>
-                      <input matInput [(ngModel)]="step.kafkaTopic" (ngModelChange)="triggerSave()" placeholder="my-topic" />
-                    </mat-form-field>
-                    <div class="field-row">
-                      <mat-form-field appearance="outline" style="flex:1">
-                        <mat-label>Key</mat-label>
-                        <input matInput [(ngModel)]="step.kafkaKey" (ngModelChange)="triggerSave()" />
-                      </mat-form-field>
-                    </div>
-                    <mat-form-field appearance="outline" class="full-width">
-                      <mat-label>Payload</mat-label>
-                      <textarea matInput rows="3" [(ngModel)]="step.kafkaPayload" (ngModelChange)="triggerSave()"></textarea>
-                    </mat-form-field>
-                    <app-template-preview [template]="step.kafkaPayload ?? ''"></app-template-preview>
-                  </div>
-                }
-
-                @if (step.type === 'use_module_action' && getModule(step.moduleId)?.type === 'http') {
-                  <div class="module-fields">
-                    <div class="field-row">
-                      <mat-form-field appearance="outline" style="width:120px;flex-shrink:0">
-                        <mat-label>Method</mat-label>
-                        <mat-select [(ngModel)]="step.httpMethod" (ngModelChange)="triggerSave()">
-                          @for (m of httpMethods; track m) {
-                            <mat-option [value]="m">{{ m }}</mat-option>
-                          }
-                        </mat-select>
-                      </mat-form-field>
-                      <mat-form-field appearance="outline" style="flex:1">
-                        <mat-label>URL</mat-label>
-                        <input matInput [(ngModel)]="step.httpUrl" (ngModelChange)="triggerSave()" placeholder="https://…" />
-                      </mat-form-field>
-                    </div>
-                    <mat-form-field appearance="outline" class="full-width">
-                      <mat-label>Body</mat-label>
-                      <textarea matInput rows="3" [(ngModel)]="step.httpBody" (ngModelChange)="triggerSave()"></textarea>
-                    </mat-form-field>
-                    <app-template-preview [template]="step.httpBody ?? ''"></app-template-preview>
-                  </div>
-                }
-
-                <!-- Condition section -->
-                <div class="condition-section">
-                  <label class="condition-toggle-row">
-                    <input
-                      type="checkbox"
-                      class="cond-checkbox"
-                      [checked]="conditionEnabled[step.id]"
-                      (change)="toggleCondition(step, $any($event.target).checked)"
-                    />
-                    <span class="cond-toggle-label">Has condition</span>
-                  </label>
-
-                  @if (conditionEnabled[step.id]) {
-                    <div class="condition-body">
-                      <div class="cond-mode-row">
-                        <label class="radio-label">
-                          <input
-                            type="radio"
-                            [checked]="conditionMode[step.id] === 'saved'"
-                            (change)="setConditionMode(step, 'saved')"
-                          />
-                          Use saved condition
-                        </label>
-                        <label class="radio-label">
-                          <input
-                            type="radio"
-                            [checked]="conditionMode[step.id] === 'inline'"
-                            (change)="setConditionMode(step, 'inline')"
-                          />
-                          Define inline
-                        </label>
-                      </div>
-
-                      @if (conditionMode[step.id] === 'saved') {
-                        <mat-form-field appearance="outline" style="width:100%;max-width:360px">
-                          <mat-label>Saved Condition</mat-label>
-                          <mat-select [(ngModel)]="step.conditionId" (ngModelChange)="triggerSave()">
-                            <mat-option value="">(none)</mat-option>
-                            @for (sc of savedConditions; track sc.id) {
-                              <mat-option [value]="sc.id">{{ sc.name }}</mat-option>
-                            }
-                          </mat-select>
-                        </mat-form-field>
-                      }
-
-                      @if (conditionMode[step.id] === 'inline' && inlineConditions[step.id]) {
-                        <div class="inline-condition-fields">
-                          <mat-form-field appearance="outline" style="flex:1;min-width:180px">
-                            <mat-label>Condition Type</mat-label>
-                            <mat-select [(ngModel)]="inlineConditions[step.id].type" (ngModelChange)="triggerSave()">
-                              <mat-option value="request.method">Request Method</mat-option>
-                              <mat-option value="request.header">Request Header</mat-option>
-                              <mat-option value="request.query_param">Query Param</mat-option>
-                              <mat-option value="request.body_json">Body JSON</mat-option>
-                              <mat-option value="request.body_raw">Body Raw</mat-option>
-                              <mat-option value="request.path_param">Path Param</mat-option>
-                            </mat-select>
-                          </mat-form-field>
-
-                          @if (showParam(inlineConditions[step.id].type)) {
-                            <mat-form-field appearance="outline" style="flex:1;min-width:120px">
-                              <mat-label>Parameter</mat-label>
-                              <input
-                                matInput
-                                [(ngModel)]="inlineConditions[step.id].param"
-                                (ngModelChange)="triggerSave()"
-                              />
-                            </mat-form-field>
-                          }
-
-                          <mat-form-field appearance="outline" style="min-width:150px">
-                            <mat-label>Operator</mat-label>
-                            <mat-select [(ngModel)]="inlineConditions[step.id].op" (ngModelChange)="triggerSave()">
-                              <mat-option value="equals">equals</mat-option>
-                              <mat-option value="not_equals">not equals</mat-option>
-                              <mat-option value="contains">contains</mat-option>
-                              <mat-option value="not_contains">not contains</mat-option>
-                              <mat-option value="exists">exists</mat-option>
-                              <mat-option value="not_exists">not exists</mat-option>
-                              <mat-option value="matches_regex">matches regex</mat-option>
-                            </mat-select>
-                          </mat-form-field>
-
-                          @if (showValue(inlineConditions[step.id].op)) {
-                            <mat-form-field appearance="outline" style="flex:1;min-width:120px">
-                              <mat-label>Value</mat-label>
-                              <input
-                                matInput
-                                [(ngModel)]="inlineConditions[step.id].value"
-                                (ngModelChange)="triggerSave()"
-                              />
-                            </mat-form-field>
-                          }
-                        </div>
-
-                        <button class="btn-save-condition" (click)="saveConditionAsReusable(step)">
-                          <span class="material-icons">bookmark_add</span>
-                          Save as reusable condition
-                        </button>
-                      }
-                    </div>
-                  }
-                </div>
-              </div>
+        <!-- Parameters -->
+        <div class="params-card">
+          <div class="params-head">
+            <span class="params-title">Parameters</span>
+            <span class="params-hint">Named slots filled in wherever this workflow is attached — reference one inside a step as <code>$param.&lt;name&gt;</code>.</span>
+          </div>
+          @for (p of workflow.parameters; track $index; let i = $index) {
+            <div class="param-row">
+              <mat-form-field appearance="outline" style="width:160px">
+                <mat-label>Name</mat-label>
+                <input matInput [(ngModel)]="p.name" (ngModelChange)="triggerSave()" placeholder="entity" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" style="width:160px">
+                <mat-label>Type</mat-label>
+                <mat-select [(ngModel)]="p.type" (ngModelChange)="triggerSave()">
+                  <mat-option value="dataStore">Data Store</mat-option>
+                  <mat-option value="pathParam">Path Param</mat-option>
+                  <mat-option value="text">Text</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" style="flex:1">
+                <mat-label>Label</mat-label>
+                <input matInput [(ngModel)]="p.label" (ngModelChange)="triggerSave()" placeholder="Shown when attaching this workflow" />
+              </mat-form-field>
+              <button class="btn-icon-danger" (click)="removeParameter(i)" matTooltip="Remove parameter">
+                <span class="material-icons">delete</span>
+              </button>
             </div>
           }
+          <button class="btn-add-param" (click)="addParameter()">
+            <span class="material-icons">add</span> Add Parameter
+          </button>
         </div>
 
-        @if (workflow.steps.length === 0) {
-          <div class="empty-steps">
-            <span class="material-icons empty-icon">account_tree</span>
-            <p>No steps yet. Add the first step to define this workflow.</p>
+        <!-- Steps canvas -->
+        <app-workflow-canvas
+          [items]="workflow.steps"
+          [palette]="palette"
+          [createItem]="createItem"
+          [getBranches]="getBranches"
+          [setBranch]="setBranch"
+          [getTypeLabel]="getTypeLabel"
+          [getTypeColor]="getTypeColor"
+          [itemTemplate]="leafTemplate"
+          (itemsChange)="onStepsChange($event)">
+        </app-workflow-canvas>
+      }
+    </div>
+
+    <ng-template #leaf let-step let-onChange="onChange">
+      <div class="step-body">
+        @if (step.type === 'return_response') {
+          <div class="step-fields">
+            <mat-button-toggle-group [ngModel]="step.responseMode ?? 'block'" (ngModelChange)="onChange({ ...step, responseMode: $event })">
+              <mat-button-toggle value="block">Block</mat-button-toggle>
+              <mat-button-toggle value="template">Template</mat-button-toggle>
+            </mat-button-toggle-group>
+            @if ((step.responseMode ?? 'block') === 'block') {
+              <mat-form-field appearance="outline" style="flex:1;min-width:200px">
+                <mat-label>Response Block</mat-label>
+                <mat-select [ngModel]="step.responseBlockId" (ngModelChange)="onChange({ ...step, responseBlockId: $event })">
+                  @for (rb of responseBlocks; track rb.id) {
+                    <mat-option [value]="rb.id">{{ rb.name }} — {{ rb.statusCode }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+          </div>
+          @if ((step.responseMode ?? 'block') === 'template') {
+            <div class="module-fields">
+              <mat-form-field appearance="outline" style="width:120px">
+                <mat-label>Status Code</mat-label>
+                <input matInput type="number" [ngModel]="step.responseStatusCode" (ngModelChange)="onChange({ ...step, responseStatusCode: $event })" placeholder="200" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Body</mat-label>
+                <textarea matInput rows="3" [ngModel]="step.responseBody" (ngModelChange)="onChange({ ...step, responseBody: $event })"></textarea>
+              </mat-form-field>
+              <app-template-preview [template]="step.responseBody ?? ''"></app-template-preview>
+            </div>
+          }
+        }
+
+        @if (step.type === 'use_module_action') {
+          <div class="step-fields">
+            <mat-form-field appearance="outline" style="flex:1;min-width:200px">
+              <mat-label>Module</mat-label>
+              <mat-select [ngModel]="step.moduleId" (ngModelChange)="onChange({ ...step, moduleId: $event })">
+                @for (mod of modules; track mod.id) {
+                  <mat-option [value]="mod.id">{{ mod.name }} ({{ mod.type }})</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          @if (getModule(step.moduleId)?.type === 'kafka') {
+            <div class="module-fields">
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Topic</mat-label>
+                <input matInput [ngModel]="step.kafkaTopic" (ngModelChange)="onChange({ ...step, kafkaTopic: $event })" placeholder="my-topic" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Key</mat-label>
+                <input matInput [ngModel]="step.kafkaKey" (ngModelChange)="onChange({ ...step, kafkaKey: $event })" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Payload</mat-label>
+                <textarea matInput rows="3" [ngModel]="step.kafkaPayload" (ngModelChange)="onChange({ ...step, kafkaPayload: $event })"></textarea>
+              </mat-form-field>
+              <app-template-preview [template]="step.kafkaPayload ?? ''"></app-template-preview>
+            </div>
+          }
+
+          @if (getModule(step.moduleId)?.type === 'http') {
+            <div class="module-fields">
+              <div class="field-row">
+                <mat-form-field appearance="outline" style="width:120px;flex-shrink:0">
+                  <mat-label>Method</mat-label>
+                  <mat-select [ngModel]="step.httpMethod" (ngModelChange)="onChange({ ...step, httpMethod: $event })">
+                    @for (m of httpMethods; track m) {
+                      <mat-option [value]="m">{{ m }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline" style="flex:1">
+                  <mat-label>URL</mat-label>
+                  <input matInput [ngModel]="step.httpUrl" (ngModelChange)="onChange({ ...step, httpUrl: $event })" placeholder="https://…" />
+                </mat-form-field>
+              </div>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Body</mat-label>
+                <textarea matInput rows="3" [ngModel]="step.httpBody" (ngModelChange)="onChange({ ...step, httpBody: $event })"></textarea>
+              </mat-form-field>
+              <app-template-preview [template]="step.httpBody ?? ''"></app-template-preview>
+            </div>
+          }
+        }
+
+        @if (step.type === 'use_data_store') {
+          <div class="module-fields">
+            <div class="field-row">
+              <mat-form-field appearance="outline" style="flex:1">
+                <mat-label>Data Store</mat-label>
+                <mat-select [ngModel]="step.store" (ngModelChange)="onChange({ ...step, store: $event })">
+                  @for (opt of storeOptions(); track opt.value) {
+                    <mat-option [value]="opt.value">{{ opt.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" style="width:140px;flex-shrink:0">
+                <mat-label>Operation</mat-label>
+                <mat-select [ngModel]="step.storeOperation" (ngModelChange)="onChange({ ...step, storeOperation: $event })">
+                  <mat-option value="fetch">Fetch</mat-option>
+                  <mat-option value="save">Save</mat-option>
+                  <mat-option value="delete">Delete</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+
+            @if (step.storeOperation === 'fetch') {
+              <mat-button-toggle-group [ngModel]="step.storeFetchMode ?? 'single'" (ngModelChange)="onChange({ ...step, storeFetchMode: $event })">
+                <mat-button-toggle value="single">Single</mat-button-toggle>
+                <mat-button-toggle value="list">List</mat-button-toggle>
+              </mat-button-toggle-group>
+              @if ((step.storeFetchMode ?? 'single') === 'single') {
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Key</mat-label>
+                  <input matInput [ngModel]="step.storeKey" (ngModelChange)="onChange({ ...step, storeKey: $event })" placeholder="{{ '{{request.path_param.$param.key}}' }}" />
+                </mat-form-field>
+              }
+            }
+
+            @if (step.storeOperation === 'save') {
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Key (leave empty to auto-generate)</mat-label>
+                <input matInput [ngModel]="step.storeKey" (ngModelChange)="onChange({ ...step, storeKey: $event })" placeholder="{{ '{{request.path_param.$param.key}}' }}" />
+              </mat-form-field>
+              @if (!step.storeKey) {
+                <mat-button-toggle-group [ngModel]="step.storeKeyMode ?? 'uuid'" (ngModelChange)="onChange({ ...step, storeKeyMode: $event })">
+                  <mat-button-toggle value="uuid">UUID</mat-button-toggle>
+                  <mat-button-toggle value="sequence">Sequence</mat-button-toggle>
+                </mat-button-toggle-group>
+              }
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Value</mat-label>
+                <textarea matInput rows="3" [ngModel]="step.storeValue" (ngModelChange)="onChange({ ...step, storeValue: $event })"></textarea>
+              </mat-form-field>
+              <app-template-preview [template]="step.storeValue ?? ''"></app-template-preview>
+              <mat-checkbox [ngModel]="step.storeMerge" (ngModelChange)="onChange({ ...step, storeMerge: $event })">Merge into existing record instead of replacing</mat-checkbox>
+              <mat-checkbox [ngModel]="step.storeTimestamps" (ngModelChange)="onChange({ ...step, storeTimestamps: $event })">Add createdAt/updatedAt to this record</mat-checkbox>
+            }
+
+            @if (step.storeOperation === 'delete') {
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Key</mat-label>
+                <input matInput [ngModel]="step.storeKey" (ngModelChange)="onChange({ ...step, storeKey: $event })" placeholder="{{ '{{request.path_param.$param.key}}' }}" />
+              </mat-form-field>
+            }
           </div>
         }
 
-        <button class="btn-add-step" (click)="addStep()">
-          <span class="material-icons">add</span>
-          Add Step
-        </button>
-      }
-    </div>
+        @if (step.type === 'if_else') {
+          <div class="module-fields">
+            <div class="field-label">Condition</div>
+            <app-condition-builder [condition]="step.condition" [stores]="stores" (conditionChange)="onChange({ ...step, condition: $event })"></app-condition-builder>
+          </div>
+        }
+
+        @if (step.type === 'switch') {
+          <div class="module-fields">
+            @for (c of step.cases; track c.id; let i = $index) {
+              <div class="switch-case">
+                <div class="field-label">Case {{ i + 1 }}
+                  <button type="button" class="remove-case" (click)="removeCase(step, i, onChange)"><span class="material-icons">close</span></button>
+                </div>
+                <app-condition-builder [condition]="c.condition" [stores]="stores" (conditionChange)="updateCaseCondition(step, i, $event, onChange)"></app-condition-builder>
+              </div>
+            }
+            <button mat-stroked-button type="button" (click)="addCase(step, onChange)">
+              <span class="material-icons">add</span> Add case
+            </button>
+          </div>
+        }
+
+      </div>
+    </ng-template>
   `,
   styles: [`
     :host { display: block; }
@@ -335,44 +409,31 @@ interface InlineCondition {
     }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-    /* Steps list */
-    .steps-list { display: flex; flex-direction: column; gap: 10px; }
-
-    /* Step card */
-    .step-card {
-      display: flex; align-items: flex-start; gap: 10px;
+    /* Parameters */
+    .params-card {
+      display: flex; flex-direction: column; gap: 10px;
       background: white; border: 1px solid #e2e8f0; border-radius: 10px;
-      padding: 16px; transition: box-shadow 0.15s;
+      padding: 16px 18px;
     }
-    .step-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
-    .step-drag {
-      cursor: grab; color: #cbd5e1; padding-top: 12px;
-      flex-shrink: 0; display: flex; align-items: center;
+    .params-head { display: flex; flex-direction: column; gap: 2px; }
+    .params-title { font-size: 13px; font-weight: 700; color: #1e293b; }
+    .params-hint { font-size: 12px; color: #94a3b8; }
+    .params-hint code { background: #f1f5f9; border-radius: 3px; padding: 1px 4px; font-family: 'JetBrains Mono', monospace; }
+    .param-row { display: flex; gap: 10px; align-items: flex-start; }
+    .btn-add-param {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: none; border: 1px dashed #cbd5e1; color: #6366f1;
+      padding: 6px 14px; border-radius: 8px; cursor: pointer;
+      font-size: 13px; font-weight: 600; align-self: flex-start;
     }
-    .step-drag:active { cursor: grabbing; }
-    .step-drag .material-icons { font-size: 20px; }
+    .btn-add-param .material-icons { font-size: 16px; }
+    .btn-add-param:hover { border-color: #6366f1; background: #eef2ff; }
 
-    .step-content { flex: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-
-    .step-header-row {
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .step-number {
-      font-size: 11px; font-weight: 700; color: #6366f1;
-      background: #eef2ff; padding: 3px 10px; border-radius: 10px;
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .btn-icon-danger {
-      background: none; border: none; cursor: pointer;
-      color: #94a3b8; padding: 4px; border-radius: 6px;
-      display: flex; align-items: center;
-    }
-    .btn-icon-danger .material-icons { font-size: 18px; }
-    .btn-icon-danger:hover { background: #fef2f2; color: #ef4444; }
-
+    .step-body { display: flex; flex-direction: column; gap: 12px; }
     .step-fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
     .full-width { width: 100%; }
     .field-row { display: flex; gap: 10px; align-items: flex-start; }
+    .field-label { font-size: 12px; font-weight: 600; color: #475569; display: flex; align-items: center; gap: 6px; }
 
     /* Module-specific fields */
     .module-fields {
@@ -380,88 +441,42 @@ interface InlineCondition {
       background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px;
       padding: 12px;
     }
+    .switch-case { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: white; }
+    .remove-case { margin-left: auto; background: none; border: none; color: #94a3b8; cursor: pointer; display: flex; align-items: center; }
+    .remove-case:hover { color: #ef4444; }
 
-    /* Condition section */
-    .condition-section {
-      display: flex; flex-direction: column; gap: 10px;
-      border-top: 1px solid #f1f5f9; padding-top: 12px;
+    .btn-icon-danger {
+      background: none; border: none; cursor: pointer;
+      color: #94a3b8; padding: 4px; border-radius: 6px;
+      display: flex; align-items: center;
     }
-    .condition-toggle-row {
-      display: flex; align-items: center; gap: 8px; cursor: pointer;
-      font-size: 13px; color: #475569; user-select: none;
-    }
-    .cond-checkbox { width: 15px; height: 15px; accent-color: #6366f1; cursor: pointer; }
-    .cond-toggle-label { font-weight: 500; }
-
-    .condition-body { display: flex; flex-direction: column; gap: 10px; }
-    .cond-mode-row { display: flex; gap: 20px; }
-    .radio-label {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 13px; color: #475569; cursor: pointer;
-    }
-    .radio-label input { accent-color: #6366f1; cursor: pointer; }
-
-    .inline-condition-fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
-
-    .btn-save-condition {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: none; border: 1px solid #e2e8f0; color: #6366f1;
-      padding: 6px 14px; border-radius: 6px; cursor: pointer;
-      font-size: 12px; font-weight: 600; align-self: flex-start;
-    }
-    .btn-save-condition .material-icons { font-size: 16px; }
-    .btn-save-condition:hover { background: #eef2ff; border-color: #6366f1; }
-
-    /* CDK drag */
-    .cdk-drag-preview {
-      box-shadow: 0 8px 28px rgba(0,0,0,0.14);
-      border-radius: 10px;
-      background: white;
-    }
-    .cdk-drag-placeholder { opacity: 0.3; }
-    .cdk-drag-animating { transition: transform 250ms ease; }
-    .steps-list.cdk-drop-list-dragging .step-card:not(.cdk-drag-placeholder) { transition: transform 250ms ease; }
-
-    /* Empty state */
-    .empty-steps {
-      display: flex; flex-direction: column; align-items: center;
-      gap: 12px; padding: 60px 0; color: #94a3b8;
-    }
-    .empty-icon { font-size: 48px; color: #cbd5e1; }
-    .empty-steps p { margin: 0; font-size: 14px; color: #64748b; }
-
-    /* Add step button */
-    .btn-add-step {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: white; border: 2px dashed #cbd5e1; color: #6366f1;
-      padding: 12px 24px; border-radius: 10px; cursor: pointer;
-      font-size: 14px; font-weight: 600; align-self: flex-start;
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .btn-add-step .material-icons { font-size: 20px; }
-    .btn-add-step:hover { border-color: #6366f1; background: #eef2ff; }
+    .btn-icon-danger .material-icons { font-size: 18px; }
+    .btn-icon-danger:hover { background: #fef2f2; color: #ef4444; }
   `],
 })
 export class WorkflowBuilderComponent implements OnInit, OnDestroy {
   workflow: ResponseWorkflowDto | null = null;
   responseBlocks: ResponseBlockDto[] = [];
   modules: ModuleDto[] = [];
-  savedConditions: SavedConditionDto[] = [];
+  stores: DataStoreDto[] = [];
   loading = false;
   saving = false;
   workflowId = '';
 
-  conditionEnabled: Record<string, boolean> = {};
-  conditionMode: Record<string, 'saved' | 'inline'> = {};
-  inlineConditions: Record<string, InlineCondition> = {};
-
   readonly httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  readonly defaultLeaf: Condition = { type: 'request.method', op: 'equals', value: '' };
+
+  @ViewChild('leaf', { static: true }) leafTemplate!: TemplateRef<any>;
+
+  palette = PALETTE;
+  createItem = createStep;
+  getBranches = getStepBranches;
+  setBranch = setStepBranch;
 
   private saveSubject = new Subject<void>();
   private destroy$ = new Subject<void>();
 
   private route = inject(ActivatedRoute);
-  private router = inject(Router);
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
 
@@ -474,6 +489,7 @@ export class WorkflowBuilderComponent implements OnInit, OnDestroy {
         return this.api.updateResponseWorkflow(this.workflowId, {
           name: this.workflow.name,
           steps: this.workflow.steps,
+          parameters: this.workflow.parameters,
         });
       }),
       takeUntil(this.destroy$),
@@ -499,62 +515,42 @@ export class WorkflowBuilderComponent implements OnInit, OnDestroy {
   load(): void {
     this.loading = true;
     this.api.getResponseWorkflow(this.workflowId).subscribe({
-      next: (wf) => { this.workflow = wf; this.loading = false; this.initConditionState(); },
+      next: (wf) => {
+        this.workflow = { ...wf, parameters: wf.parameters ?? [] };
+        this.loading = false;
+      },
       error: () => { this.loading = false; },
     });
     this.api.getResponseBlocks().subscribe({ next: (rbs) => { this.responseBlocks = rbs; }, error: () => {} });
     this.api.getModules().subscribe({ next: (mods) => { this.modules = mods; }, error: () => {} });
-    this.api.getSavedConditions().subscribe({ next: (scs) => { this.savedConditions = scs; }, error: () => {} });
+    this.api.getDataStores().subscribe({ next: (stores) => { this.stores = stores; }, error: () => {} });
   }
 
-  initConditionState(): void {
+  addParameter(): void {
     if (!this.workflow) return;
-    for (const step of this.workflow.steps) {
-      const hasCond = !!(step.conditionId || step.condition);
-      this.conditionEnabled[step.id] = hasCond;
-      if (step.conditionId) {
-        this.conditionMode[step.id] = 'saved';
-      } else if (step.condition) {
-        this.conditionMode[step.id] = 'inline';
-        const c = step.condition as unknown as Record<string, unknown>;
-        this.inlineConditions[step.id] = {
-          type: (c['type'] as string) || 'request.method',
-          param: (c['param'] as string) || '',
-          op: (c['op'] as string) || 'equals',
-          value: (c['value'] as string) || '',
-        };
-      } else {
-        this.conditionMode[step.id] = 'saved';
-      }
-    }
+    const newParam: WorkflowParameter = { name: '', type: 'dataStore', label: '' };
+    const parameters = [...(this.workflow.parameters ?? []), newParam];
+    this.workflow = { ...this.workflow, parameters };
+    this.triggerSave();
   }
 
-  syncConditionsToSteps(): void {
+  removeParameter(index: number): void {
     if (!this.workflow) return;
-    for (const step of this.workflow.steps) {
-      if (!this.conditionEnabled[step.id]) {
-        step.condition = undefined;
-        step.conditionId = undefined;
-      } else if (this.conditionMode[step.id] === 'inline') {
-        const ic = this.inlineConditions[step.id];
-        if (ic) {
-          step.condition = {
-            type: ic.type as 'request.method',
-            op: ic.op as 'equals',
-            param: ic.param || undefined,
-            value: ic.value || undefined,
-          };
-        }
-        step.conditionId = undefined;
-      } else {
-        // saved mode — conditionId already bound via ngModel, clear inline condition
-        step.condition = undefined;
-      }
-    }
+    const parameters = (this.workflow.parameters ?? []).filter((_, i) => i !== index);
+    this.workflow = { ...this.workflow, parameters };
+    this.triggerSave();
+  }
+
+  /** Real Data Stores plus, for each declared dataStore-typed parameter, a `$param.<name>` option. */
+  storeOptions(): StoreOption[] {
+    const real = this.stores.map(s => ({ value: s.id, label: s.name }));
+    const params = (this.workflow?.parameters ?? [])
+      .filter(p => p.type === 'dataStore' && p.name)
+      .map(p => ({ value: `$param.${p.name}`, label: `→ ${p.name} (parameter)` }));
+    return [...real, ...params];
   }
 
   triggerSave(): void {
-    this.syncConditionsToSteps();
     this.saveSubject.next();
   }
 
@@ -564,36 +560,10 @@ export class WorkflowBuilderComponent implements OnInit, OnDestroy {
     this.saveSubject.next();
   }
 
-  dropStep(event: CdkDragDrop<ResponseWorkflowStep[]>): void {
-    if (!this.workflow || event.previousIndex === event.currentIndex) return;
-    const steps = [...this.workflow.steps];
-    moveItemInArray(steps, event.previousIndex, event.currentIndex);
-    steps.forEach((s, i) => { s.order = i + 1; });
-    this.workflow = { ...this.workflow, steps };
-    this.triggerSave();
-  }
-
-  addStep(): void {
+  onStepsChange(steps: unknown[]): void {
     if (!this.workflow) return;
-    const newStep: ResponseWorkflowStep = {
-      id: Math.random().toString(36).slice(2, 11),
-      order: this.workflow.steps.length + 1,
-      type: 'return_response',
-    };
-    this.workflow = { ...this.workflow, steps: [...this.workflow.steps, newStep] };
-    this.conditionEnabled[newStep.id] = false;
-    this.conditionMode[newStep.id] = 'saved';
-    this.triggerSave();
-  }
-
-  deleteStep(step: ResponseWorkflowStep): void {
-    if (!this.workflow) return;
-    const steps = this.workflow.steps.filter(s => s.id !== step.id);
-    steps.forEach((s, i) => { s.order = i + 1; });
-    this.workflow = { ...this.workflow, steps };
-    delete this.conditionEnabled[step.id];
-    delete this.conditionMode[step.id];
-    delete this.inlineConditions[step.id];
+    const normalized = normalizeSteps(steps as ResponseWorkflowStep[]);
+    this.workflow = { ...this.workflow, steps: normalized };
     this.triggerSave();
   }
 
@@ -601,52 +571,31 @@ export class WorkflowBuilderComponent implements OnInit, OnDestroy {
     return this.modules.find(m => m.id === moduleId);
   }
 
-  toggleCondition(step: ResponseWorkflowStep, enabled: boolean): void {
-    this.conditionEnabled[step.id] = enabled;
-    if (enabled) {
-      if (!this.conditionMode[step.id]) {
-        this.conditionMode[step.id] = 'saved';
-      }
-      if (this.conditionMode[step.id] === 'inline' && !this.inlineConditions[step.id]) {
-        this.inlineConditions[step.id] = { type: 'request.method', param: '', op: 'equals', value: '' };
-      }
-    }
-    this.triggerSave();
+  // Arrow properties, not methods — these are passed by reference to <app-workflow-canvas>
+  // as plain @Input() callbacks and later invoked as `this.getTypeLabel(item)` from THAT
+  // component's `this`, so a regular method would see the wrong `this` and crash.
+  getTypeLabel = (item: unknown): string => {
+    const step = item as ResponseWorkflowStep;
+    if (step.type === 'use_module_action') return this.getModule(step.moduleId)?.type === 'kafka' ? 'Kafka Publish' : 'HTTP Request';
+    return step.type;
+  };
+
+  getTypeColor = (item: unknown): string => {
+    return STEP_COLORS[(item as ResponseWorkflowStep).type] ?? '#64748b';
+  };
+
+  addCase(step: ResponseWorkflowStep, onChange: (updated: unknown) => void): void {
+    const cases = [...(step.cases ?? []), { id: randomId(), condition: this.defaultLeaf, steps: [] }];
+    onChange({ ...step, cases });
   }
 
-  setConditionMode(step: ResponseWorkflowStep, mode: 'saved' | 'inline'): void {
-    this.conditionMode[step.id] = mode;
-    if (mode === 'inline' && !this.inlineConditions[step.id]) {
-      this.inlineConditions[step.id] = { type: 'request.method', param: '', op: 'equals', value: '' };
-    }
-    this.triggerSave();
+  removeCase(step: ResponseWorkflowStep, index: number, onChange: (updated: unknown) => void): void {
+    const cases = (step.cases ?? []).filter((_, i) => i !== index);
+    onChange({ ...step, cases });
   }
 
-  saveConditionAsReusable(step: ResponseWorkflowStep): void {
-    const name = prompt('Name for this saved condition:');
-    if (!name?.trim()) return;
-    const ic = this.inlineConditions[step.id];
-    if (!ic) return;
-    const condition: Record<string, unknown> = { type: ic.type, op: ic.op };
-    if (ic.param) condition['param'] = ic.param;
-    if (ic.value) condition['value'] = ic.value;
-    this.api.createSavedCondition({ name: name.trim(), condition: condition as never }).subscribe({
-      next: (sc) => {
-        this.savedConditions = [...this.savedConditions, sc];
-        step.conditionId = sc.id;
-        this.conditionMode[step.id] = 'saved';
-        this.triggerSave();
-        this.snack.open('Condition saved', '', { duration: 2000 });
-      },
-      error: () => this.snack.open('Failed to save condition', 'OK', { duration: 3000 }),
-    });
-  }
-
-  showParam(type: string): boolean {
-    return ['request.header', 'request.query_param', 'request.path_param', 'request.body_json'].includes(type);
-  }
-
-  showValue(op: string): boolean {
-    return !['exists', 'not_exists'].includes(op);
+  updateCaseCondition(step: ResponseWorkflowStep, index: number, condition: Condition, onChange: (updated: unknown) => void): void {
+    const cases = (step.cases ?? []).map((c, i) => (i === index ? { ...c, condition } : c));
+    onChange({ ...step, cases });
   }
 }

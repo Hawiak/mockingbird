@@ -1,9 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import { createHash } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios from 'axios';
+import { load } from 'js-yaml';
 import type { Service, ParsedSpec, ParsedEndpoint, ParsedParameter } from '@mockingbird/shared-types';
 import { ResponseGeneratorService } from './response-generator.service';
 
@@ -27,20 +26,24 @@ type OperationLike = {
   operationId?: string;
 };
 
+/**
+ * Loads and parses OpenAPI specs. `type: 'url'` fetches fresh over the network on every
+ * load()/refresh(); `type: 'upload' | 'hosted'` reads the raw spec text directly from
+ * `service.spec.specContent`, which lives in mockingbird.yaml — no separate on-disk
+ * cache, so an uploaded/hosted spec travels with the config file. `specHashes` is purely
+ * an in-memory, same-process dedup for the url-refresh interval; it's never a source of
+ * truth and doesn't need to survive a restart.
+ */
 @Injectable()
 export class SwaggerLoaderService implements OnModuleDestroy {
   private readonly logger = new Logger(SwaggerLoaderService.name);
-  private readonly cacheDir: string;
   private readonly specHashes = new Map<string, string>();
   private readonly intervals = new Map<string, ReturnType<typeof setInterval>>();
 
   constructor(
     private readonly responseGenerator: ResponseGeneratorService,
     private readonly eventEmitter: EventEmitter2,
-  ) {
-    this.cacheDir = process.env.CACHE_DIR ?? '.mockingbird-cache';
-    mkdirSync(join(this.cacheDir, 'specs'), { recursive: true });
-  }
+  ) {}
 
   onModuleDestroy(): void {
     for (const interval of this.intervals.values()) {
@@ -52,42 +55,24 @@ export class SwaggerLoaderService implements OnModuleDestroy {
     return this.specHashes.has(serviceId);
   }
 
-  /** Persists raw spec text (from an upload) so load() can read it from cache. */
-  saveSpecContent(serviceId: string, content: string): void {
-    writeFileSync(this.cachePath(serviceId), content, 'utf8');
-  }
-
   async load(service: Service): Promise<ParsedSpec> {
-    const cachePath = this.cachePath(service.id);
-
     if (service.spec.type === 'url' && service.spec.url) {
-      try {
-        const raw = await this.fetchSpec(service);
-        writeFileSync(cachePath, raw, 'utf8');
-        const parsed = await this.parseSpec(cachePath);
-        const spec = this.buildParsedSpec(service.id, parsed, raw);
-        this.startRefreshInterval(service);
-        return spec;
-      } catch (e: unknown) {
-        this.logger.warn(`Fetch failed for ${service.name}: ${(e as Error).message}. Using cache.`);
-        if (!existsSync(cachePath)) throw new Error(`No cache for service ${service.id}`);
-      }
+      const raw = await this.fetchSpec(service);
+      const spec = await this.buildParsedSpec(service.id, raw);
+      this.startRefreshInterval(service);
+      return spec;
     }
 
-    // upload / hosted → read from cache
-    if (!existsSync(cachePath)) {
-      throw new Error(`Cache file not found for service ${service.id}: ${cachePath}`);
+    // upload / hosted → raw spec text lives directly on the service, in mockingbird.yaml
+    if (!service.spec.specContent) {
+      throw new Error(`No spec content stored for service ${service.id}`);
     }
-
-    const raw = readFileSync(cachePath, 'utf8');
-    const parsed = await this.parseSpec(cachePath);
-    return this.buildParsedSpec(service.id, parsed, raw);
+    return this.buildParsedSpec(service.id, service.spec.specContent);
   }
 
   async refresh(service: Service): Promise<ParsedSpec | null> {
     if (service.spec.type !== 'url' || !service.spec.url) return null;
 
-    const cachePath = this.cachePath(service.id);
     let raw: string;
     try {
       raw = await this.fetchSpec(service);
@@ -99,10 +84,7 @@ export class SwaggerLoaderService implements OnModuleDestroy {
     const hash = createHash('sha256').update(raw).digest('hex');
     if (hash === this.specHashes.get(service.id)) return null;
 
-    this.specHashes.set(service.id, hash);
-    writeFileSync(cachePath, raw, 'utf8');
-    const parsed = await this.parseSpec(cachePath);
-    const spec = this.buildParsedSpec(service.id, parsed, raw);
+    const spec = await this.buildParsedSpec(service.id, raw);
     this.eventEmitter.emit('spec.changed', new SpecChangedEvent(service.id, spec));
     this.logger.log(`Spec changed for ${service.name}`);
     return spec;
@@ -118,19 +100,17 @@ export class SwaggerLoaderService implements OnModuleDestroy {
     return typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
   }
 
-  private async parseSpec(filePath: string): Promise<OasDocument> {
-    const api = await SwaggerParser.dereference(filePath) as OasDocument;
+  private async parseSpec(raw: string): Promise<OasDocument> {
+    const document = load(raw);
+    const api = await SwaggerParser.dereference(document) as OasDocument;
     return api;
   }
 
-  private cachePath(serviceId: string): string {
-    return join(this.cacheDir, 'specs', `${serviceId}.json`);
-  }
-
-  private buildParsedSpec(serviceId: string, api: OasDocument, rawSpec: string): ParsedSpec {
+  private async buildParsedSpec(serviceId: string, rawSpec: string): Promise<ParsedSpec> {
     const hash = createHash('sha256').update(rawSpec).digest('hex');
     this.specHashes.set(serviceId, hash);
 
+    const api = await this.parseSpec(rawSpec);
     const endpoints: ParsedEndpoint[] = [];
     const paths = api.paths ?? {};
 

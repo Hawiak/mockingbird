@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { load, dump } from 'js-yaml';
 import type { Config, ParsedEndpoint, KafkaModuleConfig } from '@mockingbird/shared-types';
+import { BUILTIN_WORKFLOWS } from './builtin-workflows';
 
 @Injectable()
 export class ConfigService {
@@ -24,11 +25,9 @@ export class ConfigService {
     resolved.responseBlocks ??= [];
     resolved.responseWorkflows ??= [];
     resolved.savedConditions ??= [];
+    resolved.dataStores ??= [];
     for (const svc of resolved.services ?? []) {
       svc.endpoints ??= [];
-      for (const ep of svc.endpoints) {
-        ep.statements ??= [];
-      }
     }
 
     // Seed a default workflow if none exist
@@ -56,6 +55,15 @@ export class ConfigService {
       });
     }
 
+    // Seed the built-in CRUD workflow templates — idempotent per fixed id, not
+    // gated on the array being empty, so they're always present regardless of
+    // what else is configured (and reappear if one is deleted).
+    for (const builtin of BUILTIN_WORKFLOWS) {
+      if (!resolved.responseWorkflows.some(w => w.id === builtin.id)) {
+        resolved.responseWorkflows.push(builtin);
+      }
+    }
+
     this.current = resolved;
     return this.current;
   }
@@ -64,8 +72,8 @@ export class ConfigService {
 
   /**
    * Merge spec-discovered endpoints into the in-memory config for a service.
-   * Existing endpoints (with statements/config) are preserved.
-   * New endpoints from the spec are appended with empty statements.
+   * Existing endpoints (with their responseNode config) are preserved.
+   * New endpoints from the spec are appended with no response configured.
    * Does NOT write to disk — runtime state only.
    */
   mergeSpecEndpoints(serviceId: string, parsedEndpoints: ParsedEndpoint[]): void {
@@ -82,7 +90,6 @@ export class ConfigService {
           id: randomUUID(),
           method: ep.method,
           path: ep.path,
-          statements: [],
         });
       }
     }
@@ -118,6 +125,10 @@ export class ConfigService {
       if (topicDups.length)
         throw new Error(`Module "${mod.name}" has duplicate Kafka topics: ${topicDups.join(', ')}`);
     }
+    const storeNames = (config.dataStores ?? []).map(s => s.name);
+    const storeNameDups = storeNames.filter((n, i) => storeNames.indexOf(n) !== i);
+    if (storeNameDups.length)
+      throw new Error(`Duplicate data store names: ${storeNameDups.join(', ')}`);
   }
 
   private resolveEnvVars(obj: unknown): unknown {

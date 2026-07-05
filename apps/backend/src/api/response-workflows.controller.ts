@@ -30,6 +30,7 @@ export class ResponseWorkflowsController {
       id: randomUUID(),
       name: dto.name,
       steps: dto.steps ?? [],
+      parameters: dto.parameters ?? [],
     };
     if (!updated.responseWorkflows) updated.responseWorkflows = [];
     updated.responseWorkflows.push(workflow);

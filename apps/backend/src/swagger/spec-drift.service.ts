@@ -25,12 +25,12 @@ export class SpecDriftService {
     const newPaths = new Set(newSpec.endpoints.map(e => `${e.method}:${e.path}`));
     const orphans: OrphanedEndpointDto[] = oldEndpoints
       .filter(e => !newPaths.has(`${e.method}:${e.path}`))
-      .filter(e => (e.statements?.length ?? 0) > 0 || !!e.defaultResponseBlockId)
+      .filter(e => !!e.responseNode)
       .map(e => ({
         method: e.method,
         path: e.path,
         serviceId,
-        statementCount: e.statements?.length ?? 0,
+        hasResponse: !!e.responseNode,
       }));
     this.orphaned.set(serviceId, orphans);
   }

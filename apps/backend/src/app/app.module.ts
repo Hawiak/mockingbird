@@ -12,6 +12,7 @@ import { WorkflowModule } from '../workflow/workflow.module';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
 import { KafkaListenerModule } from '../kafka-listener/kafka-listener.module';
 import { ApiModule } from '../api/api.module';
+import { DataStoreModule } from '../data-store/data-store.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ApiModule } from '../api/api.module';
     WorkflowModule,
     ModuleRegistryModule,
     KafkaListenerModule,
+    DataStoreModule,
     ApiModule,
   ],
   controllers: [AppController],

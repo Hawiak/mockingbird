@@ -1,7 +1,6 @@
 test-output
 node_modules/
 dist/
-.mockingbird-cache/
 *.tmp
 .env
 .env.*

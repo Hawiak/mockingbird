@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConditionService } from './condition.service';
-import { StatementMatcherService } from './statement-matcher.service';
+import { DataStoreModule } from '../data-store/data-store.module';
 
 @Module({
-  providers: [ConditionService, StatementMatcherService],
-  exports: [ConditionService, StatementMatcherService],
+  imports: [DataStoreModule],
+  providers: [ConditionService],
+  exports: [ConditionService],
 })
 export class StatementModule {}

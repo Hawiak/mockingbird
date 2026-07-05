@@ -7,17 +7,18 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import type { Condition, ConditionLeaf, ConditionGroup, ConditionType, Operator } from '@mockingbird/shared-types';
+import type { Condition, ConditionLeaf, ConditionGroup, ConditionType, Operator, DataStoreDto } from '@mockingbird/shared-types';
 
-const CONDITION_TYPES: { value: ConditionType; label: string }[] = [
-  { value: 'request.method', label: 'Method' },
-  { value: 'request.path_param', label: 'Path Param' },
-  { value: 'request.query_param', label: 'Query Param' },
-  { value: 'request.header', label: 'Header' },
-  { value: 'request.body_json', label: 'Body JSON' },
-  { value: 'request.body_xml', label: 'Body XML' },
-  { value: 'request.body_raw', label: 'Body Raw' },
-  { value: 'request.count', label: 'Call Count' },
+const CONDITION_TYPES: { value: ConditionType; label: string; contexts: ('http' | 'kafka')[] }[] = [
+  { value: 'request.method', label: 'Method', contexts: ['http'] },
+  { value: 'request.path_param', label: 'Path Param', contexts: ['http'] },
+  { value: 'request.query_param', label: 'Query Param', contexts: ['http'] },
+  { value: 'request.header', label: 'Header', contexts: ['http', 'kafka'] },
+  { value: 'request.body_json', label: 'Body JSON', contexts: ['http', 'kafka'] },
+  { value: 'request.body_xml', label: 'Body XML', contexts: ['http', 'kafka'] },
+  { value: 'request.body_raw', label: 'Body Raw', contexts: ['http', 'kafka'] },
+  { value: 'request.count', label: 'Call Count', contexts: ['http', 'kafka'] },
+  { value: 'store.exists', label: 'Store Has Record', contexts: ['http', 'kafka'] },
 ];
 
 const OPERATORS: { value: Operator; label: string }[] = [
@@ -38,6 +39,7 @@ const PARAM_TYPES: ConditionType[] = [
   'request.header',
   'request.body_json',
   'request.body_xml',
+  'store.exists',
 ];
 
 const VALUELESS_OPS: Operator[] = ['exists', 'not_exists'];
@@ -83,9 +85,24 @@ function defaultGroup(): ConditionGroup {
                   </mat-select>
                 </mat-form-field>
 
+                @if (asLeaf(leaf).type === 'store.exists') {
+                  <mat-form-field appearance="outline" class="param-field">
+                    <mat-label>Data Store</mat-label>
+                    @if (stores.length) {
+                      <mat-select [ngModel]="asLeaf(leaf).store" (ngModelChange)="updateLeafStore($index, $event)">
+                        @for (s of stores; track s.id) {
+                          <mat-option [value]="s.id">{{ s.name }}</mat-option>
+                        }
+                      </mat-select>
+                    } @else {
+                      <input matInput [ngModel]="asLeaf(leaf).store" (ngModelChange)="updateLeafStore($index, $event)" />
+                    }
+                  </mat-form-field>
+                }
+
                 @if (needsParam(asLeaf(leaf).type)) {
                   <mat-form-field appearance="outline" class="param-field">
-                    <mat-label>Param</mat-label>
+                    <mat-label>{{ asLeaf(leaf).type === 'store.exists' ? 'Path Param (record key)' : 'Param' }}</mat-label>
                     <input matInput [ngModel]="asLeaf(leaf).param" (ngModelChange)="updateLeafParam($index, $event)" />
                   </mat-form-field>
                 }
@@ -136,9 +153,24 @@ function defaultGroup(): ConditionGroup {
             </mat-select>
           </mat-form-field>
 
+          @if (asLeaf(condition).type === 'store.exists') {
+            <mat-form-field appearance="outline" class="param-field">
+              <mat-label>Data Store</mat-label>
+              @if (stores.length) {
+                <mat-select [ngModel]="asLeaf(condition).store" (ngModelChange)="updateSingleLeafStore($event)">
+                  @for (s of stores; track s.id) {
+                    <mat-option [value]="s.id">{{ s.name }}</mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <input matInput [ngModel]="asLeaf(condition).store" (ngModelChange)="updateSingleLeafStore($event)" />
+              }
+            </mat-form-field>
+          }
+
           @if (needsParam(asLeaf(condition).type)) {
             <mat-form-field appearance="outline" class="param-field">
-              <mat-label>Param</mat-label>
+              <mat-label>{{ asLeaf(condition).type === 'store.exists' ? 'Path Param (record key)' : 'Param' }}</mat-label>
               <input matInput [ngModel]="asLeaf(condition).param" (ngModelChange)="updateSingleLeafParam($event)" />
             </mat-form-field>
           }
@@ -178,10 +210,16 @@ function defaultGroup(): ConditionGroup {
 })
 export class ConditionBuilderComponent {
   @Input() condition: Condition = defaultLeaf();
+  /** Filters which condition types are offered — a Kafka message has no method/path/query params. */
+  @Input() context: 'http' | 'kafka' = 'http';
+  @Input() stores: DataStoreDto[] = [];
   @Output() conditionChange = new EventEmitter<Condition>();
 
-  conditionTypes = CONDITION_TYPES;
   operators = OPERATORS;
+
+  get conditionTypes() {
+    return CONDITION_TYPES.filter(t => t.contexts.includes(this.context));
+  }
 
   isGroupCondition(c: Condition): boolean { return isGroup(c); }
   isLeafCondition(c: Condition): boolean { return !isGroup(c); }
@@ -225,6 +263,13 @@ export class ConditionBuilderComponent {
     this.conditionChange.emit({ ...g, conditions });
   }
 
+  updateLeafStore(index: number, store: string): void {
+    const g = this.asGroup(this.condition);
+    const conditions = [...g.conditions];
+    conditions[index] = { ...this.asLeaf(conditions[index]), store };
+    this.conditionChange.emit({ ...g, conditions });
+  }
+
   removeLeaf(index: number): void {
     const g = this.asGroup(this.condition);
     const conditions = g.conditions.filter((_, i) => i !== index);
@@ -261,5 +306,9 @@ export class ConditionBuilderComponent {
 
   updateSingleLeafValue(value: string): void {
     this.conditionChange.emit({ ...this.asLeaf(this.condition), value });
+  }
+
+  updateSingleLeafStore(store: string): void {
+    this.conditionChange.emit({ ...this.asLeaf(this.condition), store });
   }
 }

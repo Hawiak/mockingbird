@@ -14,8 +14,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { ApiService } from '../../core/api.service';
 import type { ResponseWorkflowDto } from '../../core/api.service';
-import type { ModuleDto, KafkaListener, KafkaSendTrigger, KafkaMessageBlock } from '@mockingbird/shared-types';
-import { KafkaTopicStatementsComponent } from './kafka-topic-statements.component';
+import type { ModuleDto, KafkaListener, KafkaSendTrigger, KafkaMessageBlock, DataStoreDto, ResponseBlockDto, ResponseNode } from '@mockingbird/shared-types';
+import { ResponseNodeEditorComponent } from '../../components/response-node-editor.component';
 
 @Component({
   standalone: true,
@@ -34,7 +34,7 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
     MatTooltipModule,
     MatSnackBarModule,
     MatDividerModule,
-    KafkaTopicStatementsComponent,
+    ResponseNodeEditorComponent,
   ],
   template: `
     <div class="detail-page">
@@ -91,25 +91,10 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
                   </button>
                 </div>
                 <div class="row">
-                  <mat-form-field appearance="outline" class="row-topic">
-                    <mat-label>Trigger</mat-label>
-                    <mat-select [value]="listener.workflowId ?? ''" (selectionChange)="setListenerWorkflow(listener, $event.value)">
-                      <mat-option value="">Inline statements</mat-option>
-                      @for (wf of responseWorkflows; track wf.id) {
-                        <mat-option [value]="wf.id">{{ wf.name }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                  @if (listener.workflowId) {
-                    <a mat-icon-button [routerLink]="['/workflows', listener.workflowId]" matTooltip="Open workflow">
-                      <mat-icon>open_in_new</mat-icon>
-                    </a>
-                  } @else {
-                    <span class="stmt-count">{{ listener.statements.length }} statement(s)</span>
-                    <button mat-icon-button type="button" (click)="editListenerStatements(listener)" matTooltip="Edit statements">
-                      <mat-icon>rule</mat-icon>
-                    </button>
-                  }
+                  <span class="stmt-count">{{ listener.responseNode ? 'Response configured' : 'No response configured' }}</span>
+                  <button mat-icon-button type="button" (click)="editListenerResponse(listener)" matTooltip="Edit response">
+                    <mat-icon>rule</mat-icon>
+                  </button>
                 </div>
               </div>
             }
@@ -200,15 +185,20 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
       <div class="drawer-backdrop" (click)="closeListenerEditor()"></div>
       <div class="drawer-panel">
         <div class="drawer-head">
-          <span>Statements for topic "{{ editingListener.topic || '(unnamed)' }}"</span>
+          <span>Response for topic "{{ editingListener.topic || '(unnamed)' }}"</span>
           <button mat-icon-button (click)="closeListenerEditor()"><mat-icon>close</mat-icon></button>
         </div>
         <div class="drawer-body">
-          <app-kafka-topic-statements
-            [statements]="editingListener.statements"
+          <app-response-node-editor
+            [node]="editingListener.responseNode ?? defaultNode"
+            context="kafka"
+            [responseBlocks]="responseBlocks"
+            [responseWorkflows]="responseWorkflows"
             [modules]="modules"
-            (statementsChange)="onListenerStatementsChange($event)">
-          </app-kafka-topic-statements>
+            [stores]="stores"
+            [pathParams]="[]"
+            (nodeChange)="onListenerResponseNodeChange($event)">
+          </app-response-node-editor>
         </div>
       </div>
     }
@@ -278,9 +268,13 @@ import { KafkaTopicStatementsComponent } from './kafka-topic-statements.componen
 export class ModuleDetailComponent implements OnInit {
   module: ModuleDto | null = null;
   modules: ModuleDto[] = [];
+  stores: DataStoreDto[] = [];
+  responseBlocks: ResponseBlockDto[] = [];
   loading = false;
   testing = false;
   firing: Record<string, boolean> = {};
+
+  readonly defaultNode: ResponseNode = { id: 'root', kind: 'block' };
 
   listeners: KafkaListener[] = [];
   editingListener: KafkaListener | null = null;
@@ -306,6 +300,8 @@ export class ModuleDetailComponent implements OnInit {
       error: () => { this.loading = false; },
     });
     this.api.getResponseWorkflows().subscribe({ next: (wfs) => { this.responseWorkflows = wfs; }, error: () => {} });
+    this.api.getDataStores().subscribe({ next: (stores) => { this.stores = stores; }, error: () => {} });
+    this.api.getResponseBlocks().subscribe({ next: (rbs) => { this.responseBlocks = rbs; }, error: () => {} });
   }
 
   private syncLocalState(): void {
@@ -345,11 +341,11 @@ export class ModuleDetailComponent implements OnInit {
   }
 
   addListener(): void {
-    this.listeners = [...this.listeners, { id: crypto.randomUUID(), topic: '', statements: [] }];
+    this.listeners = [...this.listeners, { id: crypto.randomUUID(), topic: '' }];
     this.persist();
   }
 
-  editListenerStatements(listener: KafkaListener): void {
+  editListenerResponse(listener: KafkaListener): void {
     this.editingListener = listener;
   }
 
@@ -357,19 +353,14 @@ export class ModuleDetailComponent implements OnInit {
     this.editingListener = null;
   }
 
-  onListenerStatementsChange(statements: KafkaListener['statements']): void {
+  onListenerResponseNodeChange(responseNode: ResponseNode): void {
     if (!this.editingListener) return;
-    this.editingListener.statements = statements;
+    this.editingListener.responseNode = responseNode;
     this.persist();
   }
 
   removeListener(listener: KafkaListener): void {
     this.listeners = this.listeners.filter(l => l.id !== listener.id);
-    this.persist();
-  }
-
-  setListenerWorkflow(listener: KafkaListener, workflowId: string): void {
-    listener.workflowId = workflowId || undefined;
     this.persist();
   }
 

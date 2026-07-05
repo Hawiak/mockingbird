@@ -7,8 +7,10 @@ import { executeDelay } from './actions/delay.action';
 import { executeLog } from './actions/log.action';
 import { executeProxy } from './actions/proxy.action';
 import { resolveKafkaPublish } from './actions/kafka-publish.action';
+import { executeStoreFetch, executeStoreSave, executeStoreDelete } from './actions/store.action';
 import { ModuleRegistryService } from '../module-registry/module-registry.service';
 import { ConfigService } from '../config/config.service';
+import { StateStoreService } from '../data-store/state-store.service';
 
 @Injectable()
 export class WorkflowExecutorService {
@@ -18,6 +20,7 @@ export class WorkflowExecutorService {
     private readonly templateService: TemplateService,
     private readonly configService: ConfigService,
     @Optional() private readonly moduleRegistry?: ModuleRegistryService,
+    @Optional() private readonly stateStoreService?: StateStoreService,
   ) {}
 
   async execute(
@@ -153,6 +156,18 @@ export class WorkflowExecutorService {
           };
           await httpMod.execute(httpParams, ctx);
           return { action: 'http_request', status: 'ok', durationMs: Date.now() - start };
+        }
+        case 'store_fetch': {
+          if (!this.stateStoreService) throw new Error('StateStoreService not available');
+          return await executeStoreFetch(action, ctx, this.stateStoreService, this.templateService);
+        }
+        case 'store_save': {
+          if (!this.stateStoreService) throw new Error('StateStoreService not available');
+          return await executeStoreSave(action, ctx, this.stateStoreService, this.templateService);
+        }
+        case 'store_delete': {
+          if (!this.stateStoreService) throw new Error('StateStoreService not available');
+          return await executeStoreDelete(action, ctx, this.stateStoreService, this.templateService);
         }
         default:
           return null;

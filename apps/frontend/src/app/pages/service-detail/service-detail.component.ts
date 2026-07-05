@@ -69,7 +69,7 @@ import type { ServiceDto, EndpointDto } from '@mockingbird/shared-types';
                   @for (ep of group.endpoints; track ep.id) {
                     <mat-list-item class="endpoint-item" (click)="navigateEndpoint(ep.id)">
                       <span>{{ ep.path }}</span>
-                      <span class="stmt-count">{{ ep.statements?.length ?? 0 }} statements</span>
+                      <span class="stmt-count">{{ ep.responseNode ? 'response configured' : 'no response' }}</span>
                     </mat-list-item>
                   }
                 </mat-list>

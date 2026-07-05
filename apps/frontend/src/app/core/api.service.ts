@@ -4,65 +4,22 @@ import { Observable } from 'rxjs';
 import type {
   ServiceDto, CreateServiceDto, UpdateServiceDto,
   EndpointDto, UpdateEndpointDto,
-  StatementDto, CreateStatementDto, UpdateStatementDto,
   ResponseBlockDto, CreateResponseBlockDto, UpdateResponseBlockDto,
   ModuleDto, CreateModuleDto, UpdateModuleDto,
   ParameterSetDto, CreateParameterSetDto, UpdateParameterSetDto,
   LogEntryDto, HealthDto, TemplatePreviewRequestDto, TemplatePreviewResponseDto,
   TestConnectionResultDto, OrphanedEndpointDto,
-  Condition,
+  DataStoreDto, CreateDataStoreDto, UpdateDataStoreDto, DataStoreRecordDto,
+  ResponseWorkflowStep, WorkflowParameter,
+  ResponseWorkflowDto, CreateResponseWorkflowDto, UpdateResponseWorkflowDto,
+  SavedConditionDto, CreateSavedConditionDto, UpdateSavedConditionDto,
 } from '@mockingbird/shared-types';
 
-// ─── Response Workflow types (inline until shared-types is updated) ───────────
-
-export interface ResponseWorkflowStep {
-  id: string;
-  order: number;
-  type: 'return_response' | 'use_module_action';
-  conditionId?: string;
-  condition?: Condition;
-  responseBlockId?: string;
-  moduleId?: string;
-  kafkaTopic?: string;
-  kafkaKey?: string;
-  kafkaPayload?: string;
-  httpMethod?: string;
-  httpUrl?: string;
-  httpHeaders?: Record<string, string>;
-  httpBody?: string;
-}
-
-export interface ResponseWorkflowDto {
-  id: string;
-  name: string;
-  steps: ResponseWorkflowStep[];
-}
-
-export interface CreateResponseWorkflowDto {
-  name: string;
-  steps?: ResponseWorkflowStep[];
-}
-
-export interface UpdateResponseWorkflowDto {
-  name?: string;
-  steps?: ResponseWorkflowStep[];
-}
-
-export interface SavedConditionDto {
-  id: string;
-  name: string;
-  condition: Condition;
-}
-
-export interface CreateSavedConditionDto {
-  name: string;
-  condition: Condition;
-}
-
-export interface UpdateSavedConditionDto {
-  name?: string;
-  condition?: Condition;
-}
+export type {
+  ResponseWorkflowStep, WorkflowParameter,
+  ResponseWorkflowDto, CreateResponseWorkflowDto, UpdateResponseWorkflowDto,
+  SavedConditionDto, CreateSavedConditionDto, UpdateSavedConditionDto,
+};
 
 const BASE = '/api';
 
@@ -83,13 +40,6 @@ export class ApiService {
   // Endpoints
   getEndpoints(svcId: string): Observable<EndpointDto[]> { return this.http.get<EndpointDto[]>(`${BASE}/services/${svcId}/endpoints`); }
   updateEndpoint(svcId: string, eid: string, dto: UpdateEndpointDto): Observable<EndpointDto> { return this.http.put<EndpointDto>(`${BASE}/services/${svcId}/endpoints/${eid}`, dto); }
-
-  // Statements
-  getStatements(svcId: string, eid: string): Observable<StatementDto[]> { return this.http.get<StatementDto[]>(`${BASE}/services/${svcId}/endpoints/${eid}/statements`); }
-  createStatement(svcId: string, eid: string, dto: CreateStatementDto): Observable<StatementDto> { return this.http.post<StatementDto>(`${BASE}/services/${svcId}/endpoints/${eid}/statements`, dto); }
-  updateStatement(svcId: string, eid: string, sid: string, dto: UpdateStatementDto): Observable<StatementDto> { return this.http.put<StatementDto>(`${BASE}/services/${svcId}/endpoints/${eid}/statements/${sid}`, dto); }
-  deleteStatement(svcId: string, eid: string, sid: string): Observable<void> { return this.http.delete<void>(`${BASE}/services/${svcId}/endpoints/${eid}/statements/${sid}`); }
-  reorderStatement(svcId: string, eid: string, sid: string, priority: number): Observable<void> { return this.http.patch<void>(`${BASE}/services/${svcId}/endpoints/${eid}/statements/${sid}/reorder`, { priority }); }
 
   // Response blocks
   getResponseBlocks(): Observable<ResponseBlockDto[]> { return this.http.get<ResponseBlockDto[]>(`${BASE}/response-blocks`); }
@@ -136,4 +86,15 @@ export class ApiService {
   createSavedCondition(dto: CreateSavedConditionDto): Observable<SavedConditionDto> { return this.http.post<SavedConditionDto>(`${BASE}/saved-conditions`, dto); }
   updateSavedCondition(id: string, dto: UpdateSavedConditionDto): Observable<SavedConditionDto> { return this.http.put<SavedConditionDto>(`${BASE}/saved-conditions/${id}`, dto); }
   deleteSavedCondition(id: string): Observable<void> { return this.http.delete<void>(`${BASE}/saved-conditions/${id}`); }
+
+  // Data stores
+  getDataStores(): Observable<DataStoreDto[]> { return this.http.get<DataStoreDto[]>(`${BASE}/data-stores`); }
+  createDataStore(dto: CreateDataStoreDto): Observable<DataStoreDto> { return this.http.post<DataStoreDto>(`${BASE}/data-stores`, dto); }
+  updateDataStore(id: string, dto: UpdateDataStoreDto): Observable<DataStoreDto> { return this.http.put<DataStoreDto>(`${BASE}/data-stores/${id}`, dto); }
+  deleteDataStore(id: string): Observable<void> { return this.http.delete<void>(`${BASE}/data-stores/${id}`); }
+  getDataStoreRecords(id: string): Observable<DataStoreRecordDto[]> { return this.http.get<DataStoreRecordDto[]>(`${BASE}/data-stores/${id}/records`); }
+  clearDataStoreRecords(id: string): Observable<void> { return this.http.delete<void>(`${BASE}/data-stores/${id}/records`); }
+  deleteDataStoreRecord(id: string, key: string): Observable<void> { return this.http.delete<void>(`${BASE}/data-stores/${id}/records/${key}`); }
+  saveDataStoreSeed(id: string): Observable<DataStoreDto> { return this.http.post<DataStoreDto>(`${BASE}/data-stores/${id}/seed`, {}); }
+  resetDataStoreToSeed(id: string): Observable<void> { return this.http.post<void>(`${BASE}/data-stores/${id}/records/reset`, {}); }
 }

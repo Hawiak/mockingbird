@@ -11,7 +11,6 @@ export class LogController {
     @Query('serviceId') serviceId?: string,
     @Query('method') method?: string,
     @Query('statusRange') statusRange?: string,
-    @Query('statementId') statementId?: string,
     @Query('path') path?: string,
   ): LogEntryDto[] {
     let entries = this.logService.getAll();
@@ -21,9 +20,6 @@ export class LogController {
     }
     if (method) {
       entries = entries.filter(e => e.method.toUpperCase() === method.toUpperCase());
-    }
-    if (statementId) {
-      entries = entries.filter(e => e.statementId === statementId);
     }
     if (path) {
       entries = entries.filter(e => e.path.includes(path));
