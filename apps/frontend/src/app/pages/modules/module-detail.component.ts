@@ -12,9 +12,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ApiService } from '../../core/api.service';
 import type { ResponseWorkflowDto } from '../../core/api.service';
-import type { ModuleDto, KafkaListener, KafkaSendTrigger, KafkaMessageBlock, DataStoreDto, ResponseBlockDto, ResponseNode } from '@mockingbird/shared-types';
+import type { ModuleDto, KafkaListener, KafkaSendTrigger, KafkaMessageBlock, KafkaSimulator, DataStoreDto, ResponseBlockDto, ResponseNode } from '@mockingbird/shared-types';
 import { ResponseNodeEditorComponent } from '../../components/response-node-editor.component';
 
 @Component({
@@ -34,6 +36,8 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
     MatTooltipModule,
     MatSnackBarModule,
     MatDividerModule,
+    MatSlideToggleModule,
+    MatCheckboxModule,
     ResponseNodeEditorComponent,
   ],
   template: `
@@ -177,6 +181,74 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
               </div>
             }
           </section>
+
+          <mat-divider></mat-divider>
+
+          <section class="section">
+            <div class="section-header">
+              <h3>Traffic simulator</h3>
+              <button mat-stroked-button type="button" (click)="addSimulator()">
+                <mat-icon>add</mat-icon> Add Simulator
+              </button>
+            </div>
+            @if (simulators.length === 0) {
+              <p class="hint">
+                No simulators yet — a simulator publishes to a topic on its own, on a randomized
+                schedule, drawing each message body from one or more Message Blocks above (run
+                through the template engine, so <code>faker</code> / <code>randomInt</code> /
+                <code>autoIncrement</code> helpers all apply).
+              </p>
+            }
+            @for (sim of simulators; track sim.id) {
+              <div class="card">
+                <div class="row">
+                  <mat-form-field appearance="outline" class="row-topic">
+                    <mat-label>Name</mat-label>
+                    <input matInput [(ngModel)]="sim.name" [ngModelOptions]="{standalone: true}" (change)="persist()" />
+                  </mat-form-field>
+                  <mat-slide-toggle [(ngModel)]="sim.enabled" [ngModelOptions]="{standalone: true}" (change)="persist()">
+                    {{ sim.enabled ? 'Running' : 'Stopped' }}
+                  </mat-slide-toggle>
+                  <button mat-icon-button type="button" color="warn" (click)="removeSimulator(sim)" matTooltip="Delete">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Topic</mat-label>
+                  <input matInput [(ngModel)]="sim.topic" [ngModelOptions]="{standalone: true}" (change)="persist()" />
+                </mat-form-field>
+                <div class="row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Min interval (ms)</mat-label>
+                    <input matInput type="number" min="50" [(ngModel)]="sim.minIntervalMs" [ngModelOptions]="{standalone: true}" (change)="persist()" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Max interval (ms)</mat-label>
+                    <input matInput type="number" min="50" [(ngModel)]="sim.maxIntervalMs" [ngModelOptions]="{standalone: true}" (change)="persist()" />
+                  </mat-form-field>
+                  <span class="stmt-count">
+                    ≈ {{ rateLabel(sim) }}
+                  </span>
+                </div>
+                <div class="block-picker">
+                  <span class="hint" style="margin: 0 8px 0 0;">Draw from:</span>
+                  @if (messageBlocks.length === 0) {
+                    <span class="hint">Add a message block above first.</span>
+                  }
+                  @for (block of messageBlocks; track block.id) {
+                    <mat-checkbox
+                      [checked]="isBlockSelected(sim, block.id)"
+                      (change)="toggleSimulatorBlock(sim, block.id)">
+                      {{ block.name || '(unnamed)' }}
+                    </mat-checkbox>
+                  }
+                </div>
+                @if ((sim.messageBlockIds?.length ?? 0) === 0 && messageBlocks.length > 0) {
+                  <p class="hint">None selected — draws from every message block on this module.</p>
+                }
+              </div>
+            }
+          </section>
         }
       }
     </div>
@@ -250,6 +322,7 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
     .hint code { background: #f1f5f9; border-radius: 3px; padding: 1px 4px; font-family: 'JetBrains Mono', monospace; }
     .row { display: flex; align-items: center; gap: 8px; }
     .row-topic { flex: 1; }
+    .block-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 4px 0 8px; }
     .stmt-count { font-size: 11px; color: #64748b; white-space: nowrap; }
     .listener-block { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; }
     .listener-block:last-child { border-bottom: none; }
@@ -281,6 +354,7 @@ export class ModuleDetailComponent implements OnInit {
   triggers: KafkaSendTrigger[] = [];
   messageBlocks: KafkaMessageBlock[] = [];
   editingBlock: (KafkaMessageBlock & { isNew?: boolean }) | null = null;
+  simulators: KafkaSimulator[] = [];
   responseWorkflows: ResponseWorkflowDto[] = [];
 
   private route = inject(ActivatedRoute);
@@ -310,12 +384,19 @@ export class ModuleDetailComponent implements OnInit {
     this.listeners = cfg['listeners'] ?? [];
     this.triggers = cfg['triggers'] ?? [];
     this.messageBlocks = cfg['messageBlocks'] ?? [];
+    this.simulators = cfg['simulators'] ?? [];
   }
 
-  /** Persists listeners/triggers/messageBlocks, preserving the connection fields untouched. */
+  /** Persists listeners/triggers/messageBlocks/simulators, preserving the connection fields untouched. */
   persist(): void {
     if (!this.module) return;
-    const config = { ...(this.module.config as unknown as Record<string, unknown>), listeners: this.listeners, triggers: this.triggers, messageBlocks: this.messageBlocks };
+    const config = {
+      ...(this.module.config as unknown as Record<string, unknown>),
+      listeners: this.listeners,
+      triggers: this.triggers,
+      messageBlocks: this.messageBlocks,
+      simulators: this.simulators,
+    };
     this.api.updateModule(this.module.id, { config }).subscribe({
       next: (mod) => { this.module = mod; },
       error: () => this.snack.open('Failed to save changes', 'OK', { duration: 3000 }),
@@ -423,5 +504,38 @@ export class ModuleDetailComponent implements OnInit {
   removeBlock(block: KafkaMessageBlock): void {
     this.messageBlocks = this.messageBlocks.filter(b => b.id !== block.id);
     this.persist();
+  }
+
+  addSimulator(): void {
+    this.simulators = [
+      ...this.simulators,
+      { id: crypto.randomUUID(), name: '', topic: '', enabled: false, minIntervalMs: 1000, maxIntervalMs: 5000, messageBlockIds: [] },
+    ];
+    this.persist();
+  }
+
+  removeSimulator(sim: KafkaSimulator): void {
+    this.simulators = this.simulators.filter(s => s.id !== sim.id);
+    this.persist();
+  }
+
+  isBlockSelected(sim: KafkaSimulator, blockId: string): boolean {
+    return (sim.messageBlockIds ?? []).includes(blockId);
+  }
+
+  toggleSimulatorBlock(sim: KafkaSimulator, blockId: string): void {
+    const current = sim.messageBlockIds ?? [];
+    sim.messageBlockIds = current.includes(blockId)
+      ? current.filter(id => id !== blockId)
+      : [...current, blockId];
+    this.persist();
+  }
+
+  /** A friendly "~N msg/sec" or "~N msg/min" label from the interval bounds, for display only. */
+  rateLabel(sim: KafkaSimulator): string {
+    const avgMs = ((sim.minIntervalMs || 0) + (sim.maxIntervalMs || 0)) / 2;
+    if (!avgMs) return '—';
+    const perSecond = 1000 / avgMs;
+    return perSecond >= 1 ? `${perSecond.toFixed(1)} msg/sec` : `${(perSecond * 60).toFixed(1)} msg/min`;
   }
 }

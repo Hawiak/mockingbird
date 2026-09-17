@@ -53,6 +53,7 @@ export interface CreateResponseBlockDto {
   statusCode: number;
   headers?: Record<string, string>;
   body?: string;
+  bodyEncoding?: 'utf8' | 'base64';
 }
 
 export interface UpdateResponseBlockDto extends Partial<CreateResponseBlockDto> {}
@@ -108,6 +109,13 @@ export interface DataStoreDto extends DataStore {
 export interface DataStoreRecordDto {
   key: string;
   value: unknown;
+}
+
+// ─── Counters (autoIncrement template helper) ───────────────────────────────
+
+export interface CounterDto {
+  key: string;
+  value: number;
 }
 
 // ─── Request Log ───────────────────────────────────────────────────────────

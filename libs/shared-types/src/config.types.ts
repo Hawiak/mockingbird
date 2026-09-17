@@ -181,6 +181,8 @@ export interface ResponseBlock {
   statusCode: number;
   headers: Record<string, string>;
   body: string;
+  /** 'base64' for binary content (documents, images, ...); absent/'utf8' is rendered through the template engine as before. */
+  bodyEncoding?: 'utf8' | 'base64';
 }
 
 export type ModuleType = 'kafka' | 'http';
@@ -207,6 +209,24 @@ export interface KafkaModuleConfig {
   triggers?: KafkaSendTrigger[];
   /** Reusable named payloads, referenced from a kafka_publish action's messageBlockId */
   messageBlocks?: KafkaMessageBlock[];
+  /** Self-firing publishers — produce a message on a randomized schedule, independent of any listener/trigger */
+  simulators?: KafkaSimulator[];
+}
+
+export interface KafkaSimulator {
+  id: string;
+  name: string;
+  topic: string;
+  enabled: boolean;
+  /** Delay before each fire is picked uniformly at random from [minIntervalMs, maxIntervalMs];
+   *  e.g. 200 (~5 msg/sec) to 15000 (~4 msg/min) covers the intended range. */
+  minIntervalMs: number;
+  maxIntervalMs: number;
+  /** Message block ids to draw a payload from at random, one per fire; empty/absent = every
+   *  message block on this module */
+  messageBlockIds?: string[];
+  /** Optional key template; overrides the chosen message block's own key if set */
+  key?: string;
 }
 
 export interface KafkaListener {

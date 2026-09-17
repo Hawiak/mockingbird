@@ -9,6 +9,9 @@ export class StateStoreService implements OnApplicationBootstrap {
   private readonly stores = new Map<string, Map<string, unknown>>();
   private readonly sequences = new Map<string, number>();
   private readonly seeded = new Set<string>();
+  /** Named counters for the {{autoIncrement "key"}} template helper — independent of any
+   *  data store's per-record sequence, keyed by whatever name the template author picks. */
+  private readonly counters = new Map<string, number>();
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -91,6 +94,26 @@ export class StateStoreService implements OnApplicationBootstrap {
     this.stores.clear();
     this.sequences.clear();
     this.seeded.clear();
+    this.counters.clear();
+  }
+
+  /** Increments and returns the named counter (starts at 1 on first use). */
+  nextAutoIncrement(key: string): number {
+    const next = (this.counters.get(key) ?? 0) + 1;
+    this.counters.set(key, next);
+    return next;
+  }
+
+  peekAutoIncrement(key: string): number {
+    return this.counters.get(key) ?? 0;
+  }
+
+  resetAutoIncrement(key: string): void {
+    this.counters.delete(key);
+  }
+
+  listAutoIncrements(): Record<string, number> {
+    return Object.fromEntries(this.counters.entries());
   }
 
   resetToSeed(storeId: string, seedRecords: Record<string, unknown> | undefined): void {

@@ -15,24 +15,34 @@ export async function executeRespond(
 ): Promise<RespondResult> {
   let statusCode = action.statusCode ?? 200;
   let body = '';
+  let sendBody: string | Buffer = '';
   const headers: Record<string, string> = { ...(action.headers ?? {}) };
 
   if (action.mode === 'block' || (!action.mode && action.responseBlockId)) {
     const block = responseBlocks.find(b => b.id === action.responseBlockId);
     if (block) {
       statusCode = block.statusCode;
-      body = templateService.render(block.body ?? '', ctx).output;
       Object.assign(headers, block.headers);
+      if (block.bodyEncoding === 'base64') {
+        // Binary content (documents, images, ...) — not template-rendered, sent as raw bytes.
+        body = block.body ?? '';
+        sendBody = Buffer.from(body, 'base64');
+      } else {
+        body = templateService.render(block.body ?? '', ctx).output;
+        sendBody = body;
+      }
     }
   } else if (action.mode === 'inline') {
     body = action.body ?? '';
+    sendBody = body;
   } else if (action.mode === 'template') {
     const rendered = templateService.render(action.body ?? '', ctx);
     body = rendered.output;
+    sendBody = body;
   }
 
   for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-  res.status(statusCode).send(body);
+  res.status(statusCode).send(sendBody);
 
   return { response: { statusCode, headers, body } };
 }

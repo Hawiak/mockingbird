@@ -46,6 +46,7 @@ modules:
       listeners: [ ... ]
       triggers: [ ... ]
       messageBlocks: [ ... ]
+      simulators: [ ... ]
 ```
 
 Secrets support `${ENV_VAR}` substitution (see
@@ -117,6 +118,44 @@ Reference it from a `kafka_publish` action instead of retyping the payload inlin
   mode: block
   messageBlockId: ping
 ```
+
+### Simulators — self-firing publishers on a randomized schedule
+
+Unlike a send trigger (manually fired) or `kafka_publish` (fired from a matched
+statement's workflow), a **simulator** fires **on its own**, continuously, on a
+randomized schedule — for load-testing a downstream consumer or just keeping a demo
+environment feeling "alive" without any human or request driving it.
+
+```yaml
+simulators:
+  - id: order-events-simulator
+    name: Random order events
+    topic: orders.simulated
+    enabled: true
+    minIntervalMs: 200      # ~5 msg/sec at the fast end
+    maxIntervalMs: 15000    # ~4 msg/min at the slow end
+    messageBlockIds: [order-event-demo]   # omit/empty = draw from every message block on this module
+    key: ''                                # optional; overrides the chosen block's own key if set
+```
+
+Each fire: pick one message block at random from `messageBlockIds` (or the module's
+entire `messageBlocks` list if that's empty), render its `payload`/`key` through the
+[template engine](./templates.md) — so `{{uuid}}`, `{{now}}`, `{{faker ...}}`,
+`{{randomInt ...}}`, `{{randomItem ...}}`, `{{autoIncrement ...}}` etc. all apply, giving
+each simulated message varied, realistic content — and publish. Then wait a fresh random
+delay, uniformly chosen between `minIntervalMs` and `maxIntervalMs`, and repeat.
+
+A simulator is independent of this module's `listeners` — it produces, they consume — so
+a module can run one, the other, both, or neither. Toggling `enabled`, or editing any
+other module field, reconnects the module and restarts its simulators immediately (same
+as editing a listener), picking up the change without a server restart. Each simulated
+fire is written to the Request Log like any other Kafka activity, with a `simulated:
+true` request header so you can tell it apart from a real inbound message or a manual
+trigger.
+
+There's no dedicated UI slider for "messages per second" — set `minIntervalMs` /
+`maxIntervalMs` directly (`1000 / rate` gives the interval for a target rate); the Module
+Detail page shows the resulting approximate rate next to the fields.
 
 ### Wildcard listeners + `request.count`
 
