@@ -192,4 +192,51 @@ describe('StateStoreService', () => {
       expect(svc.has('orders', '5000')).toBe(true);
     });
   });
+
+  describe('autoIncrement counters', () => {
+    it('starts at 1 and increments on each call', () => {
+      const svc = makeService();
+      expect(svc.nextAutoIncrement('orderId')).toBe(1);
+      expect(svc.nextAutoIncrement('orderId')).toBe(2);
+      expect(svc.nextAutoIncrement('orderId')).toBe(3);
+    });
+
+    it('tracks independent keys separately', () => {
+      const svc = makeService();
+      svc.nextAutoIncrement('a');
+      svc.nextAutoIncrement('a');
+      svc.nextAutoIncrement('b');
+      expect(svc.peekAutoIncrement('a')).toBe(2);
+      expect(svc.peekAutoIncrement('b')).toBe(1);
+    });
+
+    it('peekAutoIncrement does not advance the counter', () => {
+      const svc = makeService();
+      expect(svc.peekAutoIncrement('unseen')).toBe(0);
+      expect(svc.peekAutoIncrement('unseen')).toBe(0);
+    });
+
+    it('resetAutoIncrement restarts a key back at 1', () => {
+      const svc = makeService();
+      svc.nextAutoIncrement('orderId');
+      svc.nextAutoIncrement('orderId');
+      svc.resetAutoIncrement('orderId');
+      expect(svc.nextAutoIncrement('orderId')).toBe(1);
+    });
+
+    it('listAutoIncrements reports every counter seen so far', () => {
+      const svc = makeService();
+      svc.nextAutoIncrement('a');
+      svc.nextAutoIncrement('b');
+      svc.nextAutoIncrement('b');
+      expect(svc.listAutoIncrements()).toEqual({ a: 1, b: 2 });
+    });
+
+    it('clearAll resets counters along with stores', () => {
+      const svc = makeService();
+      svc.nextAutoIncrement('orderId');
+      svc.clearAll();
+      expect(svc.peekAutoIncrement('orderId')).toBe(0);
+    });
+  });
 });

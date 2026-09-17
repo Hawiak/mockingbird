@@ -79,7 +79,10 @@ Writes or merges a record.
 
 - **Key**: if `storeKey` renders to an empty string, a key is generated automatically —
   `uuid` (default) or `sequence` (a monotonic per-store counter, `1`, `2`, `3…`, closer
-  to what a real database's auto-increment ID looks like).
+  to what a real database's auto-increment ID looks like). This counter is internal to
+  `store_save`'s key generation; if you want an auto-incrementing *value* usable anywhere
+  in a template (not just as a generated key), see `{{autoIncrement "key"}}` in
+  [Templates](./templates.md#autoincrement-counters) — a separate, freestanding counter.
 - **Merge**: `false` replaces the record entirely (PUT semantics); `true` shallow-merges
   the new value into whatever's already stored (PATCH semantics) — fields not present in
   the new value are preserved.

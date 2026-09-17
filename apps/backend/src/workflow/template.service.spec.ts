@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { TemplateService } from './template.service';
+import { StateStoreService } from '../data-store/state-store.service';
+import type { ConfigService } from '../config/config.service';
 
 function makeCtx(overrides?: Partial<{
   method: string;
@@ -234,5 +236,95 @@ describe('TemplateService', () => {
       ctx,
     );
     expect(output).toBe('method=DELETE id=7');
+  });
+
+  // ── prefix/suffix wrapping (plain template text, no helper needed) ─────────────
+
+  it('wraps an interpolated value in literal prefix/suffix text', () => {
+    const ctx = makeCtx({ pathParams: { id: '42' } });
+    const { output } = svc.render('ORDER-{{request.path_param.id}}-CONFIRMED', ctx);
+    expect(output).toBe('ORDER-42-CONFIRMED');
+  });
+
+  // ── faker / random helpers ──────────────────────────────────────────────────
+
+  it('resolves {{faker "person.fullName"}} to a non-empty string', () => {
+    const ctx = makeCtx();
+    const { output, warnings } = svc.render('{{faker "person.fullName"}}', ctx);
+    expect(output.length).toBeGreaterThan(0);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('resolves {{faker "internet.email"}} to something email-shaped', () => {
+    const ctx = makeCtx();
+    const { output } = svc.render('{{faker "internet.email"}}', ctx);
+    expect(output).toContain('@');
+  });
+
+  it('warns for an unknown faker path', () => {
+    const ctx = makeCtx();
+    const { output, warnings } = svc.render('{{faker "not.a.real.path"}}', ctx);
+    expect(output).toBe('');
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('resolves {{randomInt min max}} within the inclusive range', () => {
+    const ctx = makeCtx();
+    for (let i = 0; i < 20; i++) {
+      const { output } = svc.render('{{randomInt 10 12}}', ctx);
+      expect(['10', '11', '12']).toContain(output);
+    }
+  });
+
+  it('resolves {{randomItem "a,b,c"}} to one of the listed items', () => {
+    const ctx = makeCtx();
+    for (let i = 0; i < 20; i++) {
+      const { output } = svc.render('{{randomItem "a,b,c"}}', ctx);
+      expect(['a', 'b', 'c']).toContain(output);
+    }
+  });
+
+  it('resolves {{randomBool}} to "true" or "false"', () => {
+    const ctx = makeCtx();
+    const { output } = svc.render('{{randomBool}}', ctx);
+    expect(['true', 'false']).toContain(output);
+  });
+
+  it('resolves {{randomDate}} to a parseable ISO-8601 string', () => {
+    const ctx = makeCtx();
+    const { output } = svc.render('{{randomDate}}', ctx);
+    expect(new Date(output).toISOString()).toBe(output);
+  });
+
+  // ── autoIncrement helper ────────────────────────────────────────────────────
+
+  describe('{{autoIncrement "key"}}', () => {
+    function makeSvcWithStore(): TemplateService {
+      const fakeConfigService = { getCurrent: () => ({ dataStores: [] }) } as unknown as ConfigService;
+      return new TemplateService(new StateStoreService(fakeConfigService));
+    }
+
+    it('starts at 1 and increments per render call', () => {
+      const withStore = makeSvcWithStore();
+      const ctx = makeCtx();
+      expect(withStore.render('{{autoIncrement "orderId"}}', ctx).output).toBe('1');
+      expect(withStore.render('{{autoIncrement "orderId"}}', ctx).output).toBe('2');
+      expect(withStore.render('{{autoIncrement "orderId"}}', ctx).output).toBe('3');
+    });
+
+    it('tracks separate keys independently', () => {
+      const withStore = makeSvcWithStore();
+      const ctx = makeCtx();
+      expect(withStore.render('{{autoIncrement "a"}}', ctx).output).toBe('1');
+      expect(withStore.render('{{autoIncrement "b"}}', ctx).output).toBe('1');
+      expect(withStore.render('{{autoIncrement "a"}}', ctx).output).toBe('2');
+    });
+
+    it('warns instead of throwing when no state store is available', () => {
+      const ctx = makeCtx();
+      const { output, warnings } = svc.render('{{autoIncrement "orderId"}}', ctx);
+      expect(output).toBe('');
+      expect(warnings).toHaveLength(1);
+    });
   });
 });

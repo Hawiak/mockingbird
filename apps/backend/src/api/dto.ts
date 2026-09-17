@@ -111,6 +111,10 @@ export class CreateResponseBlockBodyDto {
   @IsOptional()
   @IsString()
   body?: string;
+
+  @IsOptional()
+  @IsIn(['utf8', 'base64'])
+  bodyEncoding?: 'utf8' | 'base64';
 }
 
 export class UpdateResponseBlockBodyDto {
@@ -131,6 +135,10 @@ export class UpdateResponseBlockBodyDto {
   @IsOptional()
   @IsString()
   body?: string;
+
+  @IsOptional()
+  @IsIn(['utf8', 'base64'])
+  bodyEncoding?: 'utf8' | 'base64';
 }
 
 // ─── Module ────────────────────────────────────────────────────────────────

@@ -59,6 +59,16 @@ See [Data Stores](./data-stores.md) for concepts.
 | POST | `/api/data-stores/:id/seed` | Snapshot current live records into `seedRecords` |
 | POST | `/api/data-stores/:id/records/reset` | Clear live records and reapply `seedRecords` |
 
+## Counters
+
+Backs the [`{{autoIncrement "key"}}`](./templates.md#autoincrement-counters) template
+helper — separate from Data Stores.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/counters` | List every counter seen so far (`{ key, value }[]`) |
+| POST | `/api/counters/:key/reset` | Reset one counter back to zero |
+
 ## Response Workflows & Saved Conditions
 
 See [Workflows](./workflows.md) for concepts.

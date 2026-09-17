@@ -26,6 +26,36 @@ responseBlocks:
       Content-Type: application/json
     body: '{"error": "Internal Server Error"}'
 
+  # Demo: prefix/suffix wrapping — plain template text around {{...}} already does this,
+  # no special helper needed — plus a persistent, per-key {{autoIncrement "..."}} counter.
+  - id: order_confirmation_demo
+    name: 'Demo: Order confirmation'
+    statusCode: 200
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "confirmationCode": "ORDER-{{request.path_param.id}}-CONFIRMED",
+        "orderNumber": {{autoIncrement "orderNumber"}}
+      }
+
+  # Demo: faker + random helpers for varied, realistic-looking mock data.
+  - id: fake_customer_demo
+    name: 'Demo: Fake customer'
+    statusCode: 200
+    headers:
+      Content-Type: application/json
+    body: |
+      {
+        "id": "{{uuid}}",
+        "name": "{{faker "person.fullName"}}",
+        "email": "{{faker "internet.email"}}",
+        "amount": {{randomInt 10 500}},
+        "status": "{{randomItem "PENDING,SHIPPED,DELIVERED"}}",
+        "isPriority": {{randomBool}},
+        "placedAt": "{{randomDate}}"
+      }
+
 services:
   - id: petstore
     name: Petstore
@@ -49,8 +79,8 @@ services:
 
 # Example: Kafka module with SASL credentials pulled from the environment
 # (see .env.example — never hardcode secrets here). Listens on a topic and
-# can also publish via the `kafka_publish` workflow action or a manual
-# "send button" trigger.
+# can also publish via the `kafka_publish` workflow action, a manual
+# "send button" trigger, or a self-firing simulator (below).
 # modules:
 #   - id: main-kafka
 #     name: Main Kafka
@@ -70,5 +100,20 @@ services:
 #           name: Start Order
 #           topic: orders.created
 #           payload: '{"orderId": "{{uuid}}", "status": "created"}'
+#       messageBlocks:
+#         - id: order-event-demo
+#           name: 'Demo: Random order event'
+#           key: '{{uuid}}'
+#           payload: '{"orderId": "{{autoIncrement "simOrderId"}}", "customer": "{{faker "person.fullName"}}", "total": {{randomInt 5 250}}, "status": "{{randomItem "created,paid,shipped"}}"}'
+#       # Fires on its own, no incoming request/trigger needed — picks a random
+#       # message block, renders it, and publishes on a randomized schedule.
+#       simulators:
+#         - id: order-events-simulator
+#           name: 'Demo: Random order events'
+#           topic: orders.simulated
+#           enabled: true
+#           minIntervalMs: 200      # ~5 msg/sec at the fast end
+#           maxIntervalMs: 15000    # ~4 msg/min at the slow end
+#           messageBlockIds: [order-event-demo]
 modules: []
 parameterSets: []

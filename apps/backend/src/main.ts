@@ -1,6 +1,7 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import { json } from 'express';
 import { AppModule } from './app/app.module';
 import { ConfigService } from './config/config.service';
 import { ConfigWatcherService } from './config/config-watcher.service';
@@ -12,6 +13,8 @@ import { SwaggerLoaderService } from './swagger/swagger-loader.service';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.useWebSocketAdapter(new IoAdapter(app));
+  // Default express body limit (100kb) is too small for base64-encoded document uploads.
+  app.use(json({ limit: '15mb' }));
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
 

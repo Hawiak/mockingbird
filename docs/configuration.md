@@ -105,6 +105,13 @@ responseBlocks:
 Referenced by id from a `responseNode`'s `kind: block` (`responseBlockId`), a `respond`
 action in Block mode, or a Response Workflow's `return_response` step.
 
+Set `bodyEncoding: base64` to serve binary content — documents, images, or any file —
+instead of a templated string. `body` then holds the raw file bytes, base64-encoded; it
+is sent as-is (not template-rendered) and set `Content-Type`/`Content-Disposition` in
+`headers` as needed. The **Response Blocks** page has an "Upload a document/file
+instead" button that handles the encoding for you. Absent or `bodyEncoding: utf8` keeps
+the existing template-rendered string behavior.
+
 ## Condition
 
 Used throughout — a `responseNode`'s optional `condition`, an `if_else`/`switch` block's

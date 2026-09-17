@@ -16,11 +16,16 @@ persisted to a single YAML file.
   branching blocks for low-code logic inside a workflow
 - **Data stores** — named, stateful record collections so mocks can behave like a real
   CRUD backend (create, list, update, delete) instead of returning static responses
+- **Document responses** — upload a PDF/image/any file to a Response Block and serve it
+  byte-for-byte, alongside ordinary JSON/text responses
 - **Response Workflows** — reusable, multi-step response logic shared across many
   endpoints and Kafka listeners
 - **Template engine** — `{{request.header.X-User-Id}}`, `{{uuid}}`, `{{now}}`, JSONPath
-  into bodies, JSONPath into stored records
-- **Module system** — named Kafka and HTTP connectors reused across endpoints
+  into bodies, JSONPath into stored records, `{{autoIncrement "key"}}` counters, and
+  `{{faker ...}}`/`{{randomInt ...}}`/`{{randomItem ...}}`/`{{randomBool}}`/`{{randomDate}}`
+  for randomized mock data
+- **Module system** — named Kafka and HTTP connectors reused across endpoints; a Kafka
+  module can also run self-firing simulators that publish on their own randomized schedule
 - **Live request log** — WebSocket-streamed, filterable, with a per-request workflow trace
 - **Hot reload** — edit `mockingbird.yaml` directly; the server picks up changes instantly
 - **Single config file** — everything in `mockingbird.yaml`; version-control friendly

@@ -32,6 +32,7 @@ export class ResponseBlocksController {
       statusCode: dto.statusCode,
       headers: dto.headers ?? {},
       body: dto.body ?? '',
+      bodyEncoding: dto.bodyEncoding ?? 'utf8',
     };
     if (!updated.responseBlocks) updated.responseBlocks = [];
     updated.responseBlocks.push(block);

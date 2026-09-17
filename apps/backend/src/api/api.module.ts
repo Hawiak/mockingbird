@@ -19,6 +19,7 @@ import { ExportController } from './export.controller';
 import { ResponseWorkflowsController } from './response-workflows.controller';
 import { SavedConditionsController } from './saved-conditions.controller';
 import { DataStoresController } from './data-stores.controller';
+import { CountersController } from './counters.controller';
 import { DataStoreModule } from '../data-store/data-store.module';
 
 @Module({
@@ -46,6 +47,7 @@ import { DataStoreModule } from '../data-store/data-store.module';
     ResponseWorkflowsController,
     SavedConditionsController,
     DataStoresController,
+    CountersController,
   ],
 })
 export class ApiModule {}

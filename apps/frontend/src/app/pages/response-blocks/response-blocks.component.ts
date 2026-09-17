@@ -75,12 +75,30 @@ interface HeaderPair { key: string; value: string; }
             }
           </div>
 
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Body</mat-label>
-            <textarea matInput rows="10" [(ngModel)]="formBody" placeholder='{"message": "OK"}'></textarea>
-          </mat-form-field>
+          @if (formBodyEncoding === 'base64') {
+            <div class="file-body">
+              <span class="material-icons file-body-icon">description</span>
+              <div class="file-body-info">
+                <span class="file-body-name">{{ uploadedFileName || 'Uploaded file' }}</span>
+                <span class="file-body-size">{{ formatBytes(uploadedFileSize) }}</span>
+              </div>
+              <button class="btn-cancel" type="button" (click)="clearFile()">Remove</button>
+            </div>
+          } @else {
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Body</mat-label>
+              <textarea matInput rows="10" [(ngModel)]="formBody" placeholder='{"message": "OK"}'></textarea>
+            </mat-form-field>
+            <app-template-preview [template]="formBody"></app-template-preview>
+          }
 
-          <app-template-preview [template]="formBody"></app-template-preview>
+          <div class="upload-row">
+            <input #fileInput type="file" hidden (change)="onFileSelected($event)" />
+            <button class="btn-cancel" type="button" (click)="fileInput.click()">
+              <span class="material-icons">upload_file</span>
+              {{ formBodyEncoding === 'base64' ? 'Replace file' : 'Upload a document/file instead' }}
+            </button>
+          </div>
         </div>
         <div class="drawer-foot">
           <button class="btn-cancel" (click)="closeDrawer()">Cancel</button>
@@ -124,11 +142,24 @@ interface HeaderPair { key: string; value: string; }
               <span class="block-name">{{ block.name }}</span>
               <span class="status-badge" [class]="statusClass(block.statusCode)">{{ block.statusCode }}</span>
             </div>
-            <pre class="block-body">{{ bodyPreview(block.body) }}</pre>
+            @if (block.bodyEncoding === 'base64') {
+              <div class="block-body block-body-file">
+                <span class="material-icons">description</span>
+                {{ formatBytes(decodedBase64Size(block.body)) }} file
+              </div>
+            } @else {
+              <pre class="block-body">{{ bodyPreview(block.body) }}</pre>
+            }
             <div class="block-actions">
-              <button class="action-btn" (click)="copyBody(block)" matTooltip="Copy body">
-                <span class="material-icons">content_copy</span>
-              </button>
+              @if (block.bodyEncoding === 'base64') {
+                <button class="action-btn" (click)="downloadBody(block)" matTooltip="Download file">
+                  <span class="material-icons">download</span>
+                </button>
+              } @else {
+                <button class="action-btn" (click)="copyBody(block)" matTooltip="Copy body">
+                  <span class="material-icons">content_copy</span>
+                </button>
+              }
               <button class="action-btn" (click)="openEdit(block)" matTooltip="Edit">
                 <span class="material-icons">edit</span>
               </button>
@@ -217,6 +248,25 @@ interface HeaderPair { key: string; value: string; }
     .remove-header-btn:hover { background: #fef2f2; }
     .full-width { width: 100%; }
 
+    /* ── File upload / binary body ─────────────────────────── */
+    .file-body {
+      display: flex; align-items: center; gap: 10px;
+      border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px;
+      background: #f8fafc;
+    }
+    .file-body-icon { color: #6366f1; }
+    .file-body-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+    .file-body-name { font-size: 13px; font-weight: 600; color: #1e293b; word-break: break-all; }
+    .file-body-size { font-size: 12px; color: #64748b; }
+    .upload-row { display: flex; }
+    .upload-row .btn-cancel { display: flex; align-items: center; gap: 6px; }
+    .upload-row .material-icons { font-size: 18px; }
+    .block-body-file {
+      display: flex; align-items: center; gap: 6px;
+      font-family: inherit; font-size: 12px; color: #6366f1; font-weight: 600;
+    }
+    .block-body-file .material-icons { font-size: 16px; }
+
     /* ── Page layout ────────────────────────────────────────── */
     .page-wrap { padding: 0; }
     .page-header {
@@ -289,7 +339,10 @@ export class ResponseBlocksComponent implements OnInit {
   formName = '';
   formStatus = 200;
   formBody = '';
+  formBodyEncoding: 'utf8' | 'base64' = 'utf8';
   formHeaders: HeaderPair[] = [];
+  uploadedFileName: string | null = null;
+  uploadedFileSize: number | null = null;
 
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
@@ -321,7 +374,10 @@ export class ResponseBlocksComponent implements OnInit {
     this.formName = '';
     this.formStatus = 200;
     this.formBody = '';
+    this.formBodyEncoding = 'utf8';
     this.formHeaders = [];
+    this.uploadedFileName = null;
+    this.uploadedFileSize = null;
     this.drawerOpen = true;
   }
 
@@ -330,8 +386,76 @@ export class ResponseBlocksComponent implements OnInit {
     this.formName = block.name;
     this.formStatus = block.statusCode;
     this.formBody = block.body ?? '';
+    this.formBodyEncoding = block.bodyEncoding ?? 'utf8';
     this.formHeaders = Object.entries(block.headers ?? {}).map(([key, value]) => ({ key, value }));
+    this.uploadedFileName = this.formBodyEncoding === 'base64'
+      ? this.filenameFromHeaders(block.headers) ?? 'Uploaded file'
+      : null;
+    this.uploadedFileSize = this.formBodyEncoding === 'base64' ? this.decodedBase64Size(block.body) : null;
     this.drawerOpen = true;
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      this.formBody = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      this.formBodyEncoding = 'base64';
+      this.uploadedFileName = file.name;
+      this.uploadedFileSize = file.size;
+      if (!this.formHeaders.some(h => h.key.toLowerCase() === 'content-type')) {
+        this.formHeaders = [...this.formHeaders, { key: 'Content-Type', value: file.type || 'application/octet-stream' }];
+      }
+      if (!this.formHeaders.some(h => h.key.toLowerCase() === 'content-disposition')) {
+        this.formHeaders = [...this.formHeaders, { key: 'Content-Disposition', value: `inline; filename="${file.name}"` }];
+      }
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  }
+
+  clearFile(): void {
+    this.formBody = '';
+    this.formBodyEncoding = 'utf8';
+    this.uploadedFileName = null;
+    this.uploadedFileSize = null;
+  }
+
+  private filenameFromHeaders(headers?: Record<string, string>): string | null {
+    const cd = Object.entries(headers ?? {}).find(([k]) => k.toLowerCase() === 'content-disposition')?.[1];
+    return cd?.match(/filename="?([^";]+)"?/)?.[1] ?? null;
+  }
+
+  decodedBase64Size(base64?: string): number {
+    if (!base64) return 0;
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+    return Math.floor((base64.length * 3) / 4) - padding;
+  }
+
+  formatBytes(bytes: number | null): string {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  downloadBody(block: ResponseBlockDto): void {
+    if (!block.body) return;
+    const contentType = Object.entries(block.headers ?? {}).find(([k]) => k.toLowerCase() === 'content-type')?.[1]
+      ?? 'application/octet-stream';
+    const bytes = atob(block.body);
+    const buffer = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+    const blob = new Blob([buffer], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = this.filenameFromHeaders(block.headers) ?? block.name;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   closeDrawer(): void { this.drawerOpen = false; }
@@ -354,6 +478,7 @@ export class ResponseBlocksComponent implements OnInit {
       statusCode: this.formStatus,
       headers: this.headersToRecord(),
       body: this.formBody || undefined,
+      bodyEncoding: this.formBodyEncoding,
     };
     this.saving = true;
     const req$ = this.editingId
