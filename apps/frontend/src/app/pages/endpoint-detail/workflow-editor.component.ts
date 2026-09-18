@@ -12,6 +12,7 @@ import { TemplatePreviewComponent } from '../../components/template-preview.comp
 import { RespondFieldsComponent } from '../../components/respond-fields.component';
 import { ConditionBuilderComponent } from './condition-builder.component';
 import { WorkflowCanvasComponent, type PaletteBlock, type CanvasBranch } from '../../components/workflow-canvas.component';
+import { formatJson } from '../../core/json-format.util';
 
 const ACTION_COLORS: Record<ActionType, string> = {
   respond: '#22c55e',
@@ -184,7 +185,10 @@ function setActionBranch(item: unknown, key: string, items: unknown[]): unknown 
               </mat-form-field>
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Payload</mat-label>
-                <textarea matInput rows="4" [ngModel]="action.payload" (ngModelChange)="onChange({ ...action, payload: $event })"></textarea>
+                <textarea matInput class="code-textarea" rows="10" [ngModel]="action.payload" (ngModelChange)="onChange({ ...action, payload: $event })"></textarea>
+                <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="onChange({ ...action, payload: formatJson(action.payload) })">
+                  <mat-icon style="font-size:18px">code</mat-icon>
+                </button>
               </mat-form-field>
               <app-template-preview [template]="action.payload ?? ''"></app-template-preview>
             }
@@ -216,7 +220,10 @@ function setActionBranch(item: unknown, key: string, items: unknown[]): unknown 
             </mat-form-field>
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Body</mat-label>
-              <textarea matInput rows="3" [ngModel]="action.requestBody" (ngModelChange)="onChange({ ...action, requestBody: $event })"></textarea>
+              <textarea matInput class="code-textarea" rows="10" [ngModel]="action.requestBody" (ngModelChange)="onChange({ ...action, requestBody: $event })"></textarea>
+              <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="onChange({ ...action, requestBody: formatJson(action.requestBody) })">
+                <mat-icon style="font-size:18px">code</mat-icon>
+              </button>
             </mat-form-field>
             <app-template-preview [template]="action.requestBody ?? ''"></app-template-preview>
           </div>
@@ -250,6 +257,7 @@ function setActionBranch(item: unknown, key: string, items: unknown[]): unknown 
     .no-respond-warning { background: #fef9c3; border: 1px solid #fde047; border-radius: 4px; padding: 8px 12px; font-size: 14px; }
     .action-form { display: flex; flex-direction: column; gap: 8px; }
     .full-width { width: 100%; }
+    .code-textarea { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; resize: vertical; }
     .field-label { font-size: 12px; font-weight: 600; color: #475569; display: flex; align-items: center; gap: 6px; }
     .switch-case { border: 1px solid #f1f5f9; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
     .remove-case { margin-left: auto; background: none; border: none; color: #94a3b8; cursor: pointer; display: flex; align-items: center; }
@@ -265,6 +273,7 @@ export class WorkflowEditorComponent {
   @ViewChild('leaf', { static: true }) leafTemplate!: TemplateRef<any>;
 
   palette = PALETTE;
+  formatJson = formatJson;
   createItem = createAction;
   getBranches = getActionBranches;
   setBranch = setActionBranch;

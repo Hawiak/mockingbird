@@ -47,6 +47,7 @@ export class ServicesController {
       spec: dto.spec,
       cors: dto.cors,
       proxy: dto.proxy,
+      chaos: dto.chaos,
       endpoints: [],
     };
 

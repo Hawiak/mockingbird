@@ -1,14 +1,17 @@
 import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { LogSocketService } from '../core/log-socket.service';
 import type { LogEntryDto } from '@mockingbird/shared-types';
+import { formatJson } from '../core/json-format.util';
+import { JsonViewDialogComponent } from './json-view-dialog.component';
 
 @Component({
   standalone: true,
   selector: 'app-live-log-panel',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatDialogModule],
   template: `
 <div class="lp-shell">
   <!-- Header -->
@@ -75,13 +78,23 @@ import type { LogEntryDto } from '@mockingbird/shared-types';
               </div>
             </div>
             <div class="lp-section">
-              <div class="lp-section-title">Response Body</div>
-              <pre class="lp-pre">{{ (entry.response.body | slice:0:600) || '(empty)' }}</pre>
+              <div class="lp-section-title">
+                <span>Response Body</span>
+                <button class="lp-expand-btn" (click)="openViewer('Response Body', entry.response.body, entry.response.headers)" title="Open in modal">
+                  <span class="material-icons" style="font-size:14px">open_in_full</span>
+                </button>
+              </div>
+              <pre class="lp-pre">{{ (formatJson(entry.response.body) | slice:0:600) || '(empty)' }}</pre>
             </div>
             @if (entry.request.body) {
               <div class="lp-section">
-                <div class="lp-section-title">Request Body</div>
-                <pre class="lp-pre">{{ entry.request.body | slice:0:400 }}</pre>
+                <div class="lp-section-title">
+                  <span>Request Body</span>
+                  <button class="lp-expand-btn" (click)="openViewer('Request Body', entry.request.body, entry.request.headers)" title="Open in modal">
+                    <span class="material-icons" style="font-size:14px">open_in_full</span>
+                  </button>
+                </div>
+                <pre class="lp-pre">{{ formatJson(entry.request.body) | slice:0:400 }}</pre>
               </div>
             }
             @if (entry.workflowLog.length) {
@@ -156,7 +169,9 @@ import type { LogEntryDto } from '@mockingbird/shared-types';
 .lp-detail { margin-top: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px; }
 .lp-section { margin-bottom: 10px; }
 .lp-section:last-child { margin-bottom: 0; }
-.lp-section-title { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.lp-section-title { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.lp-expand-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,0.35); padding: 1px 2px; border-radius: 3px; display: flex; align-items: center; }
+.lp-expand-btn:hover { color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.08); }
 .lp-pre { margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.65); white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
 .lp-step { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
 .lp-step:last-child { border-bottom: none; }
@@ -173,6 +188,7 @@ import type { LogEntryDto } from '@mockingbird/shared-types';
 })
 export class LiveLogPanelComponent implements OnInit, OnDestroy {
   private logSocket = inject(LogSocketService);
+  private dialog = inject(MatDialog);
   private sub!: Subscription;
 
   entries: LogEntryDto[] = [];
@@ -203,6 +219,16 @@ export class LiveLogPanelComponent implements OnInit, OnDestroy {
   }
 
   clear(): void { this.logSocket.clear(); }
+
+  formatJson(text?: string): string { return formatJson(text); }
+
+  openViewer(title: string, content?: string, headers?: Record<string, string>): void {
+    this.dialog.open(JsonViewDialogComponent, {
+      data: { title, content: content ?? '', headers },
+      maxWidth: '90vw',
+      autoFocus: false,
+    });
+  }
 
   statusClass(code: number): string {
     if (code < 300) return 'status-2xx';

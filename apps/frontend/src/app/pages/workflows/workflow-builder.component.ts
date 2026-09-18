@@ -24,6 +24,7 @@ import type { ResponseBlockDto, ModuleDto, DataStoreDto, Condition } from '@mock
 import { TemplatePreviewComponent } from '../../components/template-preview.component';
 import { WorkflowCanvasComponent, type PaletteBlock, type CanvasBranch } from '../../components/workflow-canvas.component';
 import { ConditionBuilderComponent } from '../endpoint-detail/condition-builder.component';
+import { formatJson } from '../../core/json-format.util';
 
 interface StoreOption {
   value: string;
@@ -227,7 +228,10 @@ function normalizeSteps(steps: ResponseWorkflowStep[]): ResponseWorkflowStep[] {
               </mat-form-field>
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Body</mat-label>
-                <textarea matInput rows="3" [ngModel]="step.responseBody" (ngModelChange)="onChange({ ...step, responseBody: $event })"></textarea>
+                <textarea matInput class="code-textarea" rows="10" [ngModel]="step.responseBody" (ngModelChange)="onChange({ ...step, responseBody: $event })"></textarea>
+                <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="onChange({ ...step, responseBody: formatJson(step.responseBody) })">
+                  <mat-icon style="font-size:18px">code</mat-icon>
+                </button>
               </mat-form-field>
               <app-template-preview [template]="step.responseBody ?? ''"></app-template-preview>
             </div>
@@ -258,7 +262,10 @@ function normalizeSteps(steps: ResponseWorkflowStep[]): ResponseWorkflowStep[] {
               </mat-form-field>
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Payload</mat-label>
-                <textarea matInput rows="3" [ngModel]="step.kafkaPayload" (ngModelChange)="onChange({ ...step, kafkaPayload: $event })"></textarea>
+                <textarea matInput class="code-textarea" rows="10" [ngModel]="step.kafkaPayload" (ngModelChange)="onChange({ ...step, kafkaPayload: $event })"></textarea>
+                <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="onChange({ ...step, kafkaPayload: formatJson(step.kafkaPayload) })">
+                  <mat-icon style="font-size:18px">code</mat-icon>
+                </button>
               </mat-form-field>
               <app-template-preview [template]="step.kafkaPayload ?? ''"></app-template-preview>
             </div>
@@ -282,7 +289,10 @@ function normalizeSteps(steps: ResponseWorkflowStep[]): ResponseWorkflowStep[] {
               </div>
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Body</mat-label>
-                <textarea matInput rows="3" [ngModel]="step.httpBody" (ngModelChange)="onChange({ ...step, httpBody: $event })"></textarea>
+                <textarea matInput class="code-textarea" rows="10" [ngModel]="step.httpBody" (ngModelChange)="onChange({ ...step, httpBody: $event })"></textarea>
+                <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="onChange({ ...step, httpBody: formatJson(step.httpBody) })">
+                  <mat-icon style="font-size:18px">code</mat-icon>
+                </button>
               </mat-form-field>
               <app-template-preview [template]="step.httpBody ?? ''"></app-template-preview>
             </div>
@@ -432,6 +442,7 @@ function normalizeSteps(steps: ResponseWorkflowStep[]): ResponseWorkflowStep[] {
     .step-body { display: flex; flex-direction: column; gap: 12px; }
     .step-fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
     .full-width { width: 100%; }
+    .code-textarea { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; resize: vertical; }
     .field-row { display: flex; gap: 10px; align-items: flex-start; }
     .field-label { font-size: 12px; font-weight: 600; color: #475569; display: flex; align-items: center; gap: 6px; }
 
@@ -469,6 +480,7 @@ export class WorkflowBuilderComponent implements OnInit, OnDestroy {
   @ViewChild('leaf', { static: true }) leafTemplate!: TemplateRef<any>;
 
   palette = PALETTE;
+  formatJson = formatJson;
   createItem = createStep;
   getBranches = getStepBranches;
   setBranch = setStepBranch;

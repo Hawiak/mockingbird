@@ -10,9 +10,12 @@ import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { LogSocketService } from '../../core/log-socket.service';
 import type { LogEntryDto } from '@mockingbird/shared-types';
+import { formatJson } from '../../core/json-format.util';
+import { JsonViewDialogComponent } from '../../components/json-view-dialog.component';
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'KAFKA'];
 const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
@@ -32,6 +35,7 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
     MatTooltipModule,
     MatSidenavModule,
     MatDividerModule,
+    MatDialogModule,
   ],
   template: `
     <mat-sidenav-container class="page-container">
@@ -70,8 +74,13 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
 
             @if (selectedEntry.request.body) {
               <section>
-                <h4>Request Body</h4>
-                <pre class="body-pre">{{ selectedEntry.request.body }}</pre>
+                <div class="section-head">
+                  <h4>Request Body</h4>
+                  <button mat-icon-button (click)="openViewer('Request Body', selectedEntry.request.body, selectedEntry.request.headers)" matTooltip="Open in modal">
+                    <mat-icon style="font-size:18px">open_in_full</mat-icon>
+                  </button>
+                </div>
+                <pre class="body-pre">{{ formatJson(selectedEntry.request.body) }}</pre>
               </section>
             }
 
@@ -91,8 +100,13 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
 
             @if (selectedEntry.response.body) {
               <section>
-                <h4>Response Body</h4>
-                <pre class="body-pre">{{ selectedEntry.response.body }}</pre>
+                <div class="section-head">
+                  <h4>Response Body</h4>
+                  <button mat-icon-button (click)="openViewer('Response Body', selectedEntry.response.body, selectedEntry.response.headers)" matTooltip="Open in modal">
+                    <mat-icon style="font-size:18px">open_in_full</mat-icon>
+                  </button>
+                </div>
+                <pre class="body-pre">{{ formatJson(selectedEntry.response.body) }}</pre>
               </section>
             }
 
@@ -228,6 +242,9 @@ const STATUS_RANGES = ['2xx', '3xx', '4xx', '5xx'];
     .detail-path { flex: 1; font-family: monospace; font-size: 14px; }
     .detail-meta { display: flex; gap: 16px; font-size: 12px; color: #64748b; }
     section h4 { font-size: 13px; color: #475569; font-weight: 600; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; }
+    .section-head h4 { margin: 0; }
+    .section-head button { width: 28px; height: 28px; line-height: 28px; }
     .kv-table { display: flex; flex-direction: column; gap: 2px; }
     .kv-row { display: flex; gap: 8px; font-size: 12px; font-family: monospace; }
     .kv-key { color: #64748b; min-width: 160px; word-break: break-all; }
@@ -255,6 +272,7 @@ export class RequestLogComponent implements OnInit, OnDestroy {
   statusRanges = STATUS_RANGES;
 
   private logSocket = inject(LogSocketService);
+  private dialog = inject(MatDialog);
   private sub: Subscription | null = null;
 
   ngOnInit(): void {
@@ -329,5 +347,17 @@ export class RequestLogComponent implements OnInit, OnDestroy {
 
   headersOf(headers: Record<string, string>): { key: string; value: string }[] {
     return Object.entries(headers ?? {}).map(([key, value]) => ({ key, value }));
+  }
+
+  formatJson(text?: string): string {
+    return formatJson(text);
+  }
+
+  openViewer(title: string, content?: string, headers?: Record<string, string>): void {
+    this.dialog.open(JsonViewDialogComponent, {
+      data: { title, content: content ?? '', headers },
+      maxWidth: '90vw',
+      autoFocus: false,
+    });
   }
 }

@@ -15,6 +15,7 @@ import type {
   WorkflowParameter,
   SavedCondition,
   DataStore,
+  ChaosConfig,
 } from './config.types.js';
 
 // ─── Service ───────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ export interface CreateServiceDto {
   specContent?: string;
   cors?: CorsConfig;
   proxy?: ProxyConfig;
+  chaos?: ChaosConfig;
 }
 
 export interface UpdateServiceDto extends Partial<CreateServiceDto> {}
@@ -39,6 +41,7 @@ export interface UpdateEndpointDto {
   disabled?: boolean;
   proxy?: ProxyConfig | { enabled: false };
   responseNode?: ResponseNode;
+  chaos?: ChaosConfig;
 }
 
 export interface EndpointDto extends Endpoint {
