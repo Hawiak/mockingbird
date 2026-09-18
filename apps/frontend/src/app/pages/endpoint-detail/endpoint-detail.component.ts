@@ -8,9 +8,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { LogSocketService } from '../../core/log-socket.service';
-import type { EndpointDto, ResponseBlockDto, ServiceDto, ModuleDto, ResponseNode, DataStoreDto } from '@mockingbird/shared-types';
+import type { EndpointDto, ResponseBlockDto, ServiceDto, ModuleDto, ResponseNode, DataStoreDto, ChaosConfig } from '@mockingbird/shared-types';
 import type { ResponseWorkflowDto } from '../../core/api.service';
 import { ResponseNodeEditorComponent } from '../../components/response-node-editor.component';
+import { ChaosSettingsComponent } from '../../components/chaos-settings.component';
 
 @Component({
   standalone: true,
@@ -24,6 +25,7 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
     MatSlideToggleModule,
     MatSnackBarModule,
     ResponseNodeEditorComponent,
+    ChaosSettingsComponent,
   ],
   template: `
     <div class="ep-page">
@@ -59,6 +61,15 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
                   (change)="toggleDisabled($event.checked)">
                   Disable this endpoint (always returns 404)
                 </mat-slide-toggle>
+              </div>
+
+              <div class="section-card">
+                <div class="section-title">Chaos Testing</div>
+                <app-chaos-settings
+                  [value]="endpoint.chaos"
+                  hint="Overrides the service's chaos setting for this endpoint only — random hangups, 400s, 500s at the chosen uptime %."
+                  (valueChange)="updateChaos($event)">
+                </app-chaos-settings>
               </div>
 
               <div class="section-card">
@@ -279,6 +290,15 @@ export class EndpointDetailComponent implements OnInit {
         this.endpoint = { ...this.endpoint!, disabled: !checked };
         this.snack.open('Failed to update endpoint', 'OK', { duration: 3000 });
       },
+    });
+  }
+
+  updateChaos(chaos: ChaosConfig): void {
+    if (!this.endpoint) return;
+    this.endpoint = { ...this.endpoint, chaos };
+    this.api.updateEndpoint(this.svcId, this.eid, { chaos }).subscribe({
+      next: (ep) => { this.endpoint = ep as EndpointDto; },
+      error: () => this.snack.open('Failed to save chaos settings', 'OK', { duration: 3000 }),
     });
   }
 

@@ -20,6 +20,7 @@ import { resolveResponseNode, flattenWorkflowActions } from '../workflow/respons
 import { LogService } from '../log/log.service';
 import { LogGateway } from '../log/log.gateway';
 import { createCorsMiddleware } from './cors.middleware';
+import { ChaosService } from './chaos.service';
 
 @Injectable()
 export class MockServerService implements OnModuleInit {
@@ -35,6 +36,7 @@ export class MockServerService implements OnModuleInit {
     private readonly templateService: TemplateService,
     private readonly logService: LogService,
     private readonly logGateway: LogGateway,
+    private readonly chaosService: ChaosService,
   ) {}
 
   onModuleInit(): void {
@@ -106,9 +108,23 @@ export class MockServerService implements OnModuleInit {
 
           const workflowLog: WorkflowLogEntry[] = [];
           let matched = false;
+          let connectionReset = false;
+
+          const chaosConfig = this.chaosService.resolve(liveSvc, liveEndpoint);
+          const chaosFailure = chaosConfig ? this.chaosService.roll(chaosConfig) : null;
 
           if (liveEndpoint?.disabled) {
             res.status(404).json({ error: 'Endpoint disabled' });
+          } else if (chaosFailure) {
+            const chaosStart = Date.now();
+            matched = true;
+            connectionReset = await this.chaosService.apply(chaosFailure, req, res, chaosConfig!);
+            workflowLog.push({
+              action: 'chaos',
+              status: 'error',
+              message: this.chaosService.describe(chaosFailure),
+              durationMs: Date.now() - chaosStart,
+            });
           } else if (liveEndpoint?.responseNode) {
             const resolved = resolveResponseNode(liveEndpoint.responseNode, ctx, liveConfig, this.conditionService);
             if (resolved) {
@@ -131,12 +147,14 @@ export class MockServerService implements OnModuleInit {
           }
 
           // If no response was sent (no responseNode, no match, or workflow had no respond/proxy), serve the spec-generated default
-          if (!res.headersSent) {
+          if (!res.headersSent && !connectionReset) {
             const defaultTemplateCtx: TemplateContext = { request: ctx, parameterSets: {} };
             for (const [k, v] of Object.entries(capturedEndpoint.defaultHeaders)) res.setHeader(k, v);
             const body = this.templateService.render(capturedEndpoint.defaultBody ?? '', defaultTemplateCtx).output;
             res.status(capturedEndpoint.defaultStatusCode).send(body);
           }
+
+          if (connectionReset) capturedBody = '(connection reset by chaos)';
 
           // Log the request
           const logEntry: LogEntryDto = {
@@ -146,7 +164,7 @@ export class MockServerService implements OnModuleInit {
             serviceName: capturedService.name,
             method: req.method,
             path: req.path,
-            statusCode: res.statusCode,
+            statusCode: connectionReset ? 0 : res.statusCode,
             durationMs: Date.now() - start,
             matched,
             request: {

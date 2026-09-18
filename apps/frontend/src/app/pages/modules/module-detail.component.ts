@@ -18,6 +18,7 @@ import { ApiService } from '../../core/api.service';
 import type { ResponseWorkflowDto } from '../../core/api.service';
 import type { ModuleDto, KafkaListener, KafkaSendTrigger, KafkaMessageBlock, KafkaSimulator, DataStoreDto, ResponseBlockDto, ResponseNode } from '@mockingbird/shared-types';
 import { ResponseNodeEditorComponent } from '../../components/response-node-editor.component';
+import { formatJson } from '../../core/json-format.util';
 
 @Component({
   standalone: true,
@@ -150,7 +151,10 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
                 </mat-form-field>
                 <mat-form-field appearance="outline" class="full-width">
                   <mat-label>Payload</mat-label>
-                  <textarea matInput rows="3" [(ngModel)]="trigger.payload" [ngModelOptions]="{standalone: true}"></textarea>
+                  <textarea matInput class="code-textarea" rows="8" [(ngModel)]="trigger.payload" [ngModelOptions]="{standalone: true}"></textarea>
+                  <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="trigger.payload = formatJson(trigger.payload)">
+                    <mat-icon style="font-size:18px">code</mat-icon>
+                  </button>
                 </mat-form-field>
               </div>
             }
@@ -293,7 +297,10 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
           </mat-form-field>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Payload</mat-label>
-            <textarea matInput rows="6" [(ngModel)]="editingBlock.payload" [ngModelOptions]="{standalone: true}"></textarea>
+            <textarea matInput class="code-textarea" rows="14" [(ngModel)]="editingBlock.payload" [ngModelOptions]="{standalone: true}"></textarea>
+            <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="editingBlock.payload = formatJson(editingBlock.payload)">
+              <mat-icon style="font-size:18px">code</mat-icon>
+            </button>
           </mat-form-field>
         </div>
         <div class="drawer-foot">
@@ -331,6 +338,7 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
     .block-preview { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px 0; margin-bottom: 12px; }
     .full-width { width: 100%; }
+    .code-textarea { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; resize: vertical; }
     .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 1000; }
     .drawer-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100vw; background: white; z-index: 1001; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,0.15); }
     .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; }
@@ -339,6 +347,7 @@ import { ResponseNodeEditorComponent } from '../../components/response-node-edit
   `]
 })
 export class ModuleDetailComponent implements OnInit {
+  formatJson = formatJson;
   module: ModuleDto | null = null;
   modules: ModuleDto[] = [];
   stores: DataStoreDto[] = [];

@@ -26,6 +26,8 @@ export interface Service {
   spec: SpecSource;
   cors?: CorsConfig;
   proxy?: ProxyConfig;
+  /** Service-wide chaos config; an endpoint's own `chaos` (when enabled) takes priority over this. */
+  chaos?: ChaosConfig;
   endpoints: Endpoint[];
 }
 
@@ -65,6 +67,23 @@ export interface Endpoint {
   proxy?: ProxyConfig | { enabled: false };
   /** Root of the endpoint's response logic. Absent means "no response configured" — falls through to the spec-generated default. */
   responseNode?: ResponseNode;
+  /** When enabled, overrides the service-level chaos config for this endpoint only. */
+  chaos?: ChaosConfig;
+}
+
+// ─── Chaos testing ─────────────────────────────────────────────────────────
+
+export type ChaosFailureType = 'http_400' | 'http_500' | 'http_503' | 'timeout' | 'connection_reset';
+
+export interface ChaosConfig {
+  enabled: boolean;
+  /** 0-100. This share of requests are served normally; the rest randomly trigger one of `failureTypes`. */
+  uptimePercent: number;
+  /** Failure types eligible to be picked when the uptime roll fails. Empty/absent = all types. */
+  failureTypes: ChaosFailureType[];
+  /** 'timeout' only — delay is picked uniformly at random from this range before responding 504. Defaults to 5000-30000. */
+  timeoutMinMs?: number;
+  timeoutMaxMs?: number;
 }
 
 export type Condition = ConditionLeaf | ConditionGroup;

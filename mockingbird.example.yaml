@@ -68,6 +68,15 @@ services:
       enabled: true
       allowOrigins:
         - '*'
+    # Example: chaos testing — 80% of requests succeed, the rest randomly get
+    # a 400, 500, 503, a slow/timeout response, or a dropped connection. An
+    # endpoint can override this with its own `chaos` block.
+    # chaos:
+    #   enabled: true
+    #   uptimePercent: 80
+    #   failureTypes: [http_400, http_500, http_503, timeout, connection_reset]
+    #   timeoutMinMs: 5000
+    #   timeoutMaxMs: 30000
 
   # Example: private API spec loaded from an env variable
   # - id: payments

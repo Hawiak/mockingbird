@@ -3,10 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSelectModule } from '@angular/material/select';
 import type { ResponseBlockDto } from '@mockingbird/shared-types';
 import { TemplatePreviewComponent } from './template-preview.component';
+import { formatJson } from '../core/json-format.util';
 
 export interface RespondFieldsValue {
   mode?: 'block' | 'inline' | 'template';
@@ -24,7 +26,7 @@ export interface RespondFieldsValue {
 @Component({
   standalone: true,
   selector: 'app-respond-fields',
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatButtonToggleModule, MatSelectModule, TemplatePreviewComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatButtonToggleModule, MatSelectModule, TemplatePreviewComponent],
   template: `
     <div class="respond-fields">
       <mat-button-toggle-group [ngModel]="value.mode ?? 'block'" (ngModelChange)="set('mode', $event)">
@@ -50,7 +52,10 @@ export interface RespondFieldsValue {
         </mat-form-field>
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Body</mat-label>
-          <textarea matInput rows="4" [ngModel]="value.body" (ngModelChange)="set('body', $event)"></textarea>
+          <textarea matInput class="code-textarea" rows="10" [ngModel]="value.body" (ngModelChange)="set('body', $event)"></textarea>
+          <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="formatBody()">
+            <span class="material-icons" style="font-size:18px">code</span>
+          </button>
         </mat-form-field>
       }
       @if (value.mode === 'template') {
@@ -61,6 +66,7 @@ export interface RespondFieldsValue {
   styles: [`
     .respond-fields { display: flex; flex-direction: column; gap: 8px; }
     .full-width { width: 100%; }
+    .code-textarea { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; resize: vertical; }
   `],
 })
 export class RespondFieldsComponent {
@@ -70,5 +76,9 @@ export class RespondFieldsComponent {
 
   set<K extends keyof RespondFieldsValue>(key: K, val: RespondFieldsValue[K]): void {
     this.valueChange.emit({ ...this.value, [key]: val });
+  }
+
+  formatBody(): void {
+    this.set('body', formatJson(this.value.body));
   }
 }

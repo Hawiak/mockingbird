@@ -11,6 +11,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import type { ResponseBlockDto, CreateResponseBlockDto } from '@mockingbird/shared-types';
 import { TemplatePreviewComponent } from '../../components/template-preview.component';
+import { formatJson } from '../../core/json-format.util';
 
 interface HeaderPair { key: string; value: string; }
 
@@ -87,7 +88,10 @@ interface HeaderPair { key: string; value: string; }
           } @else {
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Body</mat-label>
-              <textarea matInput rows="10" [(ngModel)]="formBody" placeholder='{"message": "OK"}'></textarea>
+              <textarea matInput class="code-textarea" rows="18" [(ngModel)]="formBody" placeholder='{"message": "OK"}'></textarea>
+              <button matSuffix mat-icon-button type="button" title="Format JSON" (click)="formatBody()">
+                <span class="material-icons" style="font-size:18px">code</span>
+              </button>
             </mat-form-field>
             <app-template-preview [template]="formBody"></app-template-preview>
           }
@@ -247,6 +251,7 @@ interface HeaderPair { key: string; value: string; }
     }
     .remove-header-btn:hover { background: #fef2f2; }
     .full-width { width: 100%; }
+    .code-textarea { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; resize: vertical; }
 
     /* ── File upload / binary body ─────────────────────────── */
     .file-body {
@@ -415,6 +420,10 @@ export class ResponseBlocksComponent implements OnInit {
     };
     reader.readAsDataURL(file);
     input.value = '';
+  }
+
+  formatBody(): void {
+    this.formBody = formatJson(this.formBody);
   }
 
   clearFile(): void {

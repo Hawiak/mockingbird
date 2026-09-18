@@ -14,6 +14,7 @@ import type {
   CorsConfig,
   ProxyConfig,
   ResponseNode,
+  ChaosConfig,
 } from '@mockingbird/shared-types';
 
 // ─── Service ───────────────────────────────────────────────────────────────
@@ -41,6 +42,10 @@ export class CreateServiceBodyDto {
   @IsOptional()
   @IsObject()
   proxy?: ProxyConfig;
+
+  @IsOptional()
+  @IsObject()
+  chaos?: ChaosConfig;
 }
 
 export class UpdateServiceBodyDto {
@@ -65,6 +70,10 @@ export class UpdateServiceBodyDto {
   @IsOptional()
   @IsObject()
   proxy?: ProxyConfig;
+
+  @IsOptional()
+  @IsObject()
+  chaos?: ChaosConfig;
 }
 
 export class UpdateSpecBodyDto {
@@ -91,6 +100,10 @@ export class UpdateEndpointBodyDto {
   @IsOptional()
   @IsObject()
   responseNode?: ResponseNode;
+
+  @IsOptional()
+  @IsObject()
+  chaos?: ChaosConfig;
 }
 
 // ─── Response Block ────────────────────────────────────────────────────────

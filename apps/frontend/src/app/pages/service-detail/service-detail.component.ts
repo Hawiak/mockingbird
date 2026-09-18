@@ -15,7 +15,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatListModule } from '@angular/material/list';
 import { ApiService } from '../../core/api.service';
-import type { ServiceDto, EndpointDto } from '@mockingbird/shared-types';
+import type { ServiceDto, EndpointDto, ChaosConfig } from '@mockingbird/shared-types';
+import { ChaosSettingsComponent } from '../../components/chaos-settings.component';
 
 @Component({
   standalone: true,
@@ -36,6 +37,7 @@ import type { ServiceDto, EndpointDto } from '@mockingbird/shared-types';
     MatInputModule,
     MatTooltipModule,
     MatListModule,
+    ChaosSettingsComponent,
   ],
   template: `
     <div class="service-header">
@@ -87,6 +89,13 @@ import type { ServiceDto, EndpointDto } from '@mockingbird/shared-types';
               (change)="toggleCors($event.checked)">
               CORS Enabled
             </mat-slide-toggle>
+
+            <h3>Chaos Testing</h3>
+            <app-chaos-settings
+              [value]="service.chaos"
+              hint="Simulates flaky uptime for every endpoint on this service — random hangups, 400s, 500s — so consumers can harden against it. An endpoint can override this with its own setting."
+              (valueChange)="updateChaos($event)">
+            </app-chaos-settings>
 
             <h3>Spec Source</h3>
             <p class="spec-info">
@@ -179,6 +188,11 @@ export class ServiceDetailComponent implements OnInit {
     this.api.updateService(this.service.id, {
       cors: { ...this.service.cors, enabled },
     }).subscribe({ next: (svc) => { this.service = svc; } });
+  }
+
+  updateChaos(chaos: ChaosConfig): void {
+    if (!this.service) return;
+    this.api.updateService(this.service.id, { chaos }).subscribe({ next: (svc) => { this.service = svc; } });
   }
 
   refreshSpec(): void {
